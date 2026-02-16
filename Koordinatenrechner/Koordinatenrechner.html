@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Karte → Minecraft‑Koordinaten (Karlsruher Pyramide als Nullpunkt)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <style>
+    html,body{height:100%;margin:0}
+    #map{width:100vw;height:100vh;cursor:default;}
+    .tooltip-text{border-bottom:1px dotted #000; cursor:help;}
+    .mcY-high{color:red; font-weight:bold;}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const PYRAMID_LAT = 49.00923;
+    const PYRAMID_LON = 8.403911;
+    const PYRAMID_MINECRAFT_Y = 58; // absolute Minecraft-Höhe am Nullpunkt
+
+    const ROT_DEG = -4; // virtuelle Neigung für Berechnung der Koordinaten
+    const ROT_RAD = ROT_DEG * Math.PI / 180;
+
+    const map = L.map('map', { zoomControl:true }).setView([PYRAMID_LAT, PYRAMID_LON], 18);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+    const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap & OpenStreetMap contributors'});
+    L.control.layers({"OpenStreetMap":osm, "OpenTopoMap":topo}).addTo(map);
+
+    const R_MAJOR = 6378137.0;
+    function lonToMercX(lon){ return R_MAJOR * lon * Math.PI/180.0; }
+    function latToMercY(lat){ const latRad = lat * Math.PI/180.0; return R_MAJOR * Math.log(Math.tan(Math.PI/4 + latRad/2)); }
+    const pyramidMerc = { x: lonToMercX(PYRAMID_LON), y: latToMercY(PYRAMID_LAT) };
+
+    function rotateMercPoint(x, y, angle){
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const dx = x - pyramidMerc.x, dy = y - pyramidMerc.y;
+      const rx = dx * cos - dy * sin;
+      const ry = dx * sin + dy * cos;
+      return { x: rx, y: ry };
+    }
+
+    async function fetchElevation(lat, lon) {
+      try {
+        const url = `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        return data.results?.[0]?.elevation ?? 0;
+      } catch(e) { console.error('Elevation-Fehler', e); return 0; }
+    }
+
+    map.on('click', async function(ev){
+      const latlng = ev.latlng;
+      const clickedMerc = { x: lonToMercX(latlng.lng), y: latToMercY(latlng.lat) };
+
+      // virtuelle Drehung: Minus vor ROT_RAD für korrekte Ausrichtung
+      const rotated = rotateMercPoint(clickedMerc.x, clickedMerc.y, -ROT_RAD);
+
+      // Minecraft-Koordinaten: X = Ost-West, Z = Nord-Süd (Süden = positiv)
+      const mcX = rotated.x;
+      const mcZ = -rotated.y;
+      const elevationNN = await fetchElevation(latlng.lat, latlng.lng);
+      const mcY = elevationNN - PYRAMID_MINECRAFT_Y; // Höhe relativ zu Nullpunkt, ganze Zahl
+
+      // Y-Koordinate rot färben, wenn sie außerhalb 0-255 liegt
+      const mcYClass = (mcY < 0 || mcY > 255) ? 'mcY-high' : '';
+
+      if(window._lastMarker) map.removeLayer(window._lastMarker);
+      window._lastMarker = L.marker(latlng).addTo(map);
+
+      const popupHtml = `
+        <div>
+          <b>Ausgewählter Punkt</b><br>
+          Lat: ${latlng.lat.toFixed(6)}, Lng: ${latlng.lng.toFixed(6)}<br>
+          <hr>
+          <b>Gelände-Höhe:</b> ${elevationNN} m<br>
+          <b class='tooltip-text' title='Die Y-Koordinate zeigt die Höhe des Bodens, nicht die Höhe der Gebäude'>Minecraft-Koordinaten</b><br>
+          X: ${Math.round(mcX)}, Y: <span class='${mcYClass}'>${Math.round(mcY)}</span>, Z: ${Math.round(mcZ)}
+        </div>
+      `;
+
+      window._lastMarker.bindPopup(popupHtml).openPopup();
+    });
+  </script>
+</body>
+</html>
