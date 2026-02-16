@@ -2,7 +2,7 @@
 
 ## 🗺 Kartographie
 
-### [Plotkarte]()
+### [Plotkarte](https://raw.githubusercontent.com/ViVBling/Karlscraft/refs/heads/main/tools/plotmap/plotmap.html)
 * Karte mit allen vorhandenen Grundstücken auf dem Karlscraft Server.
 * Zeigt Spielernamen, Grundstücksnamen, Koordinaten und Kaufpreis an.
 * Wird bei jedem Server-Neustart aktualisiert.
