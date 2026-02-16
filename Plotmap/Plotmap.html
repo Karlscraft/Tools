@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Plot Map</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        #controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        #controls select {
+            width: 200px;
+            padding: 8px;
+            border-radius: 4px;
+            border: none;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+        }
+        
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            position: relative;
+        }
+        
+        #canvas-container.grabbing {
+            cursor: grabbing;
+        }
+        
+        canvas {
+            display: block;
+            background: #0d0d0d;
+        }
+        
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.95);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 6px;
+            pointer-events: none;
+            display: none;
+            z-index: 2000;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #444;
+        }
+        
+        #tooltip .plot-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #4CAF50;
+        }
+        
+        #tooltip .plot-info {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        #tooltip .plot-info strong {
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="dimension-select">Dimension:</label>
+        <select id="dimension-select"></select>
+    </div>
+    
+    <div id="info">
+        <div>Zoom: <span id="zoom-level">100%</span></div>
+        <div>Maus: Verschieben | Mausrad: Zoom</div>
+    </div>
+    
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+    
+    <div id="tooltip"></div>
+    
+    <script>
+        // Plot-Daten
+        const plotsData = {};
+        const dimensionNames = {"-1": "Nether", "-2147483648": "Mystcraft Profiler", "0": "Oberwelt", "1": "Ende"};
+        
+        // Canvas Setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        const tooltip = document.getElementById('tooltip');
+        
+        // Viewport-Zustand
+        let viewportX = 0;
+        let viewportZ = 0;
+        let scale = 2;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseZ = 0;
+        let currentDimension = 0;
+        let currentPlots = [];
+        
+        // Canvas-Größe anpassen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            draw();
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Dimension-Auswahl initialisieren
+        function initDimensionSelect() {
+            const select = document.getElementById('dimension-select');
+            select.innerHTML = '';
+            
+            for (const [dim, name] of Object.entries(dimensionNames)) {
+                if (plotsData[dim] && plotsData[dim].length > 0) {
+                    const option = document.createElement('option');
+                    option.value = dim;
+                    option.textContent = name;
+                    select.appendChild(option);
+                }
+            }
+            
+            select.addEventListener('change', (e) => {
+                currentDimension = parseInt(e.target.value);
+                loadDimension();
+            });
+            
+            // Erste verfügbare Dimension laden
+            if (select.options.length > 0) {
+                currentDimension = parseInt(select.options[0].value);
+                loadDimension();
+            }
+        }
+        
+        // Dimension laden
+        function loadDimension() {
+            currentPlots = plotsData[currentDimension] || [];
+            
+            if (currentPlots.length > 0) {
+                // Viewport zentrieren
+                centerViewport();
+            }
+            
+            draw();
+        }
+        
+        // Viewport auf alle Plots zentrieren
+        function centerViewport() {
+            if (currentPlots.length === 0) return;
+            
+            let minX = Infinity, maxX = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+            
+            for (const plot of currentPlots) {
+                minX = Math.min(minX, plot.x_min);
+                maxX = Math.max(maxX, plot.x_max);
+                minZ = Math.min(minZ, plot.z_min);
+                maxZ = Math.max(maxZ, plot.z_max);
+            }
+            
+            const centerX = (minX + maxX) / 2;
+            const centerZ = (minZ + maxZ) / 2;
+            
+            viewportX = centerX;
+            viewportZ = centerZ;
+            
+            // Zoom anpassen
+            const width = maxX - minX;
+            const depth = maxZ - minZ;
+            const scaleX = canvas.width / (width * 1.5);
+            const scaleZ = canvas.height / (depth * 1.5);
+            scale = Math.min(scaleX, scaleZ, 10);
+            scale = Math.max(scale, 0.1);
+        }
+        
+        // Welt- zu Screen-Koordinaten
+        function worldToScreen(x, z) {
+            const screenX = canvas.width / 2 + (x - viewportX) * scale;
+            const screenZ = canvas.height / 2 + (z - viewportZ) * scale;
+            return { x: screenX, z: screenZ };
+        }
+        
+        // Screen- zu Welt-Koordinaten
+        function screenToWorld(screenX, screenZ) {
+            const x = viewportX + (screenX - canvas.width / 2) / scale;
+            const z = viewportZ + (screenZ - canvas.height / 2) / scale;
+            return { x, z };
+        }
+        
+        // Zeichnen
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Gitter zeichnen
+            drawGrid();
+            
+            // Plots zeichnen
+            for (const plot of currentPlots) {
+                drawPlot(plot);
+            }
+            
+            // Zoom-Level aktualisieren
+            document.getElementById('zoom-level').textContent = Math.round(scale * 50) + '%';
+        }
+        
+        // Gitter zeichnen
+        function drawGrid() {
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 16;
+            const worldBounds = {
+                left: viewportX - canvas.width / (2 * scale),
+                right: viewportX + canvas.width / (2 * scale),
+                top: viewportZ - canvas.height / (2 * scale),
+                bottom: viewportZ + canvas.height / (2 * scale)
+            };
+            
+            // Vertikale Linien
+            for (let x = Math.floor(worldBounds.left / gridSize) * gridSize; x <= worldBounds.right; x += gridSize) {
+                const p1 = worldToScreen(x, worldBounds.top);
+                const p2 = worldToScreen(x, worldBounds.bottom);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.z);
+                ctx.lineTo(p2.x, p2.z);
+                ctx.stroke();
+            }
+            
+            // Horizontale Linien
+            for (let z = Math.floor(worldBounds.top / gridSize) * gridSize; z <= worldBounds.bottom; z += gridSize) {
+                const p1 = worldToScreen(worldBounds.left, z);
+                const p2 = worldToScreen(worldBounds.right, z);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.z);
+                ctx.lineTo(p2.x, p2.z);
+                ctx.stroke();
+            }
+            
+            // Ursprung (0,0) hervorheben
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            const origin = worldToScreen(0, 0);
+            ctx.beginPath();
+            ctx.moveTo(origin.x - 10, origin.z);
+            ctx.lineTo(origin.x + 10, origin.z);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(origin.x, origin.z - 10);
+            ctx.lineTo(origin.x, origin.z + 10);
+            ctx.stroke();
+        }
+        
+        // Plot zeichnen
+        function drawPlot(plot) {
+            const p1 = worldToScreen(plot.x_min, plot.z_min);
+            const p2 = worldToScreen(plot.x_max + 1, plot.z_max + 1);
+            
+            const width = p2.x - p1.x;
+            const height = p2.z - p1.z;
+            
+            // Plot füllen
+            ctx.fillStyle = plot.color + 'CC';
+            ctx.fillRect(p1.x, p1.z, width, height);
+            
+            // Rahmen
+            ctx.strokeStyle = plot.color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(p1.x, p1.z, width, height);
+            
+            // Name anzeigen (wenn groß genug)
+            if (width > 60 && height > 30) {
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(plot.owner, p1.x + width / 2, p1.z + height / 2);
+            }
+        }
+        
+        // Plot unter Maus finden
+        function getPlotAtPosition(mouseX, mouseZ) {
+            const world = screenToWorld(mouseX, mouseZ);
+            
+            for (const plot of currentPlots) {
+                if (world.x >= plot.x_min && world.x <= plot.x_max + 1 &&
+                    world.z >= plot.z_min && world.z <= plot.z_max + 1) {
+                    return plot;
+                }
+            }
+            
+            return null;
+        }
+        
+        // Tooltip anzeigen
+        function showTooltip(plot, mouseX, mouseZ) {
+            if (!plot) {
+                tooltip.style.display = 'none';
+                return;
+            }
+            
+            tooltip.innerHTML = `
+                <div class="plot-name">${plot.name}</div>
+                <div class="plot-info">
+                    <div><strong>Besitzer:</strong> ${plot.owner}</div>
+                    <div><strong>Koordinaten:</strong> X: ${plot.x_min} bis ${plot.x_max}, Z: ${plot.z_min} bis ${plot.z_max}</div>
+                    <div><strong>Fläche:</strong> ${plot.area_display}</div>
+                    <div><strong>Kaufpreis:</strong> ${plot.price.toLocaleString('de-DE')} €</div>
+                </div>
+            `;
+            
+            tooltip.style.display = 'block';
+            tooltip.style.left = mouseX + 15 + 'px';
+            tooltip.style.top = mouseZ + 15 + 'px';
+            
+            // Tooltip nicht außerhalb des Bildschirms
+            const rect = tooltip.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                tooltip.style.left = mouseX - rect.width - 15 + 'px';
+            }
+            if (rect.bottom > window.innerHeight) {
+                tooltip.style.top = mouseZ - rect.height - 15 + 'px';
+            }
+        }
+        
+        // Event-Handler
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseZ = e.clientY;
+            container.classList.add('grabbing');
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = e.clientX - lastMouseX;
+                const dz = e.clientY - lastMouseZ;
+                
+                viewportX -= dx / scale;
+                viewportZ -= dz / scale;
+                
+                lastMouseX = e.clientX;
+                lastMouseZ = e.clientY;
+                
+                draw();
+            } else {
+                const plot = getPlotAtPosition(e.clientX, e.clientY);
+                showTooltip(plot, e.clientX, e.clientY);
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            container.classList.remove('grabbing');
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            container.classList.remove('grabbing');
+            tooltip.style.display = 'none';
+        });
+        
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            const mouseWorld = screenToWorld(e.clientX, e.clientY);
+            
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            scale *= zoomFactor;
+            scale = Math.max(0.1, Math.min(scale, 20));
+            
+            const newMouseWorld = screenToWorld(e.clientX, e.clientY);
+            viewportX += mouseWorld.x - newMouseWorld.x;
+            viewportZ += mouseWorld.z - newMouseWorld.z;
+            
+            draw();
+        });
+        
+        // Initialisierung
+        initDimensionSelect();
+    </script>
+</body>
+</html>
