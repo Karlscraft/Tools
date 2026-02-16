@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karlscraft Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .status {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .offline-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .message p {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .contact-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .retry-button {
+            margin-top: 20px;
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .retry-button:hover {
+            background: #5568d3;
+        }
+
+        #checking {
+            display: block;
+        }
+
+        #offline {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="checking">
+            <div class="loader"></div>
+            <h1>Karlscraft Dynmap Server</h1>
+            <p class="status">Verbindung wird überprüft...</p>
+        </div>
+
+        <div id="offline">
+            <div class="offline-icon">🔌</div>
+            <h1>Server offline</h1>
+            <div class="message">
+                <p><strong>Der Karlscraft Dynmap Server ist zurzeit nicht erreichbar.</strong></p>
+                <p>Bitte versuche es zu einem späteren Zeitpunkt erneut oder kontaktiere den Server-Administrator.</p>
+            </div>
+            <div class="contact-info">
+                <p><strong>Server:</strong> karlscraft.ddns.net:4711</p>
+                <p style="margin-top: 10px;">Nächster Versuch in <strong><span id="countdown">30</span></strong> Sekunden...</p>
+            </div>
+            <button class="retry-button" onclick="checkServer()">Jetzt erneut versuchen</button>
+        </div>
+    </div>
+
+    <script>
+        const serverUrl = 'http://karlscraft.ddns.net:4711';
+        const retryInterval = 5000; // Automatisch alle 5 Sekunden erneut prüfen
+        let retryTimer = null;
+        let countdown = 5;
+        let countdownTimer = null;
+        
+        function updateCountdown() {
+            const countdownElement = document.getElementById('countdown');
+            if (countdownElement) {
+                countdownElement.textContent = countdown;
+                countdown--;
+                
+                if (countdown < 0) {
+                    countdown = Math.floor(retryInterval / 1000);
+                }
+            }
+        }
+        
+        function startCountdown() {
+            countdown = Math.floor(retryInterval / 1000);
+            updateCountdown();
+            countdownTimer = setInterval(updateCountdown, 1000);
+        }
+        
+        function stopCountdown() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }
+        
+        function checkServer() {
+            // Stoppe vorherige Timer
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+            stopCountdown();
+            
+            // Zeige Loading-Status
+            document.getElementById('checking').style.display = 'block';
+            document.getElementById('offline').style.display = 'none';
+
+            // Erstelle einen versteckten iframe zum Testen
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.id = 'testFrame';
+            
+            let timeoutReached = false;
+            let loaded = false;
+
+            // Timeout nach 5 Sekunden
+            const timeout = setTimeout(() => {
+                timeoutReached = true;
+                if (!loaded) {
+                    document.body.removeChild(iframe);
+                    serverOffline();
+                }
+            }, 5000);
+
+            // Wenn der iframe lädt, ist der Server erreichbar
+            iframe.onload = function() {
+                loaded = true;
+                clearTimeout(timeout);
+                if (!timeoutReached) {
+                    document.body.removeChild(iframe);
+                    // Server ist erreichbar - weiterleiten
+                    window.location.href = serverUrl;
+                }
+            };
+
+            // Auch bei Fehler versuchen wir weiterzuleiten
+            // (könnte X-Frame-Options sein, bedeutet aber Server ist erreichbar)
+            iframe.onerror = function() {
+                loaded = true;
+                clearTimeout(timeout);
+                if (!timeoutReached) {
+                    document.body.removeChild(iframe);
+                    // Server antwortet - weiterleiten
+                    window.location.href = serverUrl;
+                }
+            };
+
+            document.body.appendChild(iframe);
+            iframe.src = serverUrl;
+        }
+
+        function serverOffline() {
+            // Warte kurz, dann zeige Offline-Nachricht
+            setTimeout(() => {
+                document.getElementById('checking').style.display = 'none';
+                document.getElementById('offline').style.display = 'block';
+                
+                // Starte automatische Wiederholung
+                startCountdown();
+                retryTimer = setTimeout(checkServer, retryInterval);
+            }, 500);
+        }
+
+        // Starte die Überprüfung beim Laden der Seite
+        window.addEventListener('DOMContentLoaded', checkServer);
+    </script>
+</body>
+</html>
