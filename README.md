@@ -11,7 +11,7 @@
 * Interaktive Karte zum Messen von Grundstücksgrößen.
 * Dient als Grundlage für den Maßstab auf dem Server.
 
-### [DynMap](https://karlscraft.github.io/Tools/DynMap/DynMap.html)
+### [Dynmap](https://karlscraft.github.io/Tools/Dynmap/Dynmap.html)
 * Dynamische 3D-Karte des Karlscraft-Servers.
 * Nur verfügbar, wenn der Server online ist.
 * Aktualisiert sich während dem Spiel.
