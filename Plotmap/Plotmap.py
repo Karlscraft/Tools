@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Minecraft Plot Map Generator
-Liest Plot-Daten aus einer JSON-Datei, bereinigt die Daten,
-führt Plots zusammen und erstellt eine interaktive HTML-Karte
+Liest Plot-Daten aus einer JSON-Datei und erstellt eine interaktive HTML-Karte
 """
 
 import json
 import hashlib
-import re
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass
 from copy import deepcopy
+import os
 
 
 @dataclass
@@ -26,7 +25,7 @@ class Plot:
     x_max: int
     z_max: int
     dimension: int
-    original_area_data: dict  # Original area dict für JSON-Updates
+    plot_id: int
     
     def get_area_m2(self) -> int:
         """Berechnet die Fläche in m² (Blöcke sind 1x1m)"""
@@ -35,14 +34,13 @@ class Plot:
         depth = abs(self.z_max - self.z_min) + 1
         return width * depth
     
-    def get_area_display(self) -> str:
+    def get_area_formatted(self) -> str:
         """Gibt die Fläche formatiert zurück (m² oder ha)"""
         area = self.get_area_m2()
         if area > 10000:
-            ha = area / 10000
-            return f"{ha:.2f} ㏊"
+            return f"{area / 10000:.2f} ha"
         else:
-            return f"{area:,} ㎡".replace(',', '.')
+            return f"{area:,} m²".replace(',', '.')
     
     def get_price(self) -> int:
         """Berechnet den Kaufpreis (Fläche × 256 €)"""
@@ -80,26 +78,12 @@ class Plot:
         x_max = max(plot1.x_max, plot2.x_max)
         z_max = max(plot1.z_max, plot2.z_max)
         
-        # Display-Name kombinieren wenn beide custom names haben
-        if plot1.display_name.startswith("_PLOT_") and plot2.display_name.startswith("_PLOT_"):
-            merged_display_name = f"_MERGED_PLOT_"
-        elif not plot1.display_name.startswith("_PLOT_"):
-            merged_display_name = plot1.display_name
-        elif not plot2.display_name.startswith("_PLOT_"):
-            merged_display_name = plot2.display_name
-        else:
-            merged_display_name = f"{plot1.display_name} + {plot2.display_name}"
-        
-        # Merged area data erstellen
-        merged_area = deepcopy(plot1.original_area_data)
-        merged_area['area']['low']['x'] = x_min
-        merged_area['area']['low']['z'] = z_min
-        merged_area['area']['high']['x'] = x_max
-        merged_area['area']['high']['z'] = z_max
+        # Name kombinieren
+        merged_name = f"{plot1.display_name} + {plot2.display_name}"
         
         return Plot(
-            name=plot1.name,  # Behalte den ersten Namen
-            display_name=merged_display_name,
+            name=f"MERGED_{plot1.name}_{plot2.name}",
+            display_name=merged_name,
             owner_uuid=plot1.owner_uuid,
             owner_name=plot1.owner_name,
             x_min=x_min,
@@ -107,16 +91,18 @@ class Plot:
             x_max=x_max,
             z_max=z_max,
             dimension=plot1.dimension,
-            original_area_data=merged_area
+            plot_id=plot1.plot_id  # Behalte die erste ID
         )
 
 
 def uuid_to_color(uuid: str) -> str:
     """Generiert eine konsistente Farbe aus einer UUID"""
+    # Hash der UUID erstellen
     hash_obj = hashlib.md5(uuid.encode())
     hash_hex = hash_obj.hexdigest()
     
     # Erste 6 Zeichen als RGB-Farbe verwenden
+    # Helligkeit anpassen für bessere Sichtbarkeit
     r = int(hash_hex[0:2], 16)
     g = int(hash_hex[2:4], 16)
     b = int(hash_hex[4:6], 16)
@@ -129,69 +115,36 @@ def uuid_to_color(uuid: str) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def extract_plot_number(name: str) -> Optional[int]:
-    """Extrahiert die Plot-Nummer aus einem Namen wie _PLOT_4"""
-    match = re.match(r'_PLOT_(\d+)', name)
-    if match:
-        return int(match.group(1))
-    return None
-
-
-def renumber_plots(json_data: dict) -> Tuple[dict, int]:
-    """
-    Nummeriert Plots neu, sodass sie bei _PLOT_1 beginnen und durchgehend sind.
-    Gibt die modifizierte JSON-Struktur und die Anzahl umbenannter Plots zurück.
-    """
-    data = deepcopy(json_data)
-    renamed_count = 0
+def rename_plots_sequential(json_data: dict) -> dict:
+    """Benennt Plots sequenziell um, beginnend bei _PLOT_1"""
+    world_zones = json_data.get("worldZones", {})
     
-    world_zones = data.get("worldZones", {})
-    
-    # Sammle alle existierenden Plot-Nummern
-    existing_numbers = set()
-    plot_areas = []
-    
+    # Sammle alle Plots
+    all_plots = []
     for dim_id_str, zone_data in world_zones.items():
-        area_zones = zone_data.get("areaZones", [])
-        for area in area_zones:
-            name = area.get("name", "")
-            plot_num = extract_plot_number(name)
-            if plot_num is not None:
-                existing_numbers.add(plot_num)
-                plot_areas.append((dim_id_str, area))
+        for area in zone_data.get("areaZones", []):
+            all_plots.append({
+                'area': area,
+                'dimension': dim_id_str
+            })
     
-    # Prüfe ob Umnummerierung nötig ist
-    if not existing_numbers:
-        return data, 0
+    # Sortiere nach ID (falls vorhanden)
+    all_plots.sort(key=lambda x: x['area'].get('id', 999999))
     
-    expected_numbers = set(range(1, len(existing_numbers) + 1))
-    if existing_numbers == expected_numbers:
-        print("  → Plot-Nummerierung ist bereits korrekt")
-        return data, 0
-    
-    # Erstelle Mapping: alte Nummer -> neue Nummer
-    sorted_old_numbers = sorted(existing_numbers)
-    number_mapping = {}
-    next_new_number = 1
-    
-    for old_num in sorted_old_numbers:
-        number_mapping[old_num] = next_new_number
-        next_new_number += 1
-    
-    # Benenne Plots um
-    for dim_id_str, area in plot_areas:
-        old_name = area.get("name", "")
-        old_num = extract_plot_number(old_name)
+    # Benenne um
+    next_number = 1
+    for plot_info in all_plots:
+        area = plot_info['area']
+        old_name = area.get('name', '')
         
-        if old_num is not None and old_num in number_mapping:
-            new_num = number_mapping[old_num]
-            if old_num != new_num:
-                new_name = f"_PLOT_{new_num}"
-                area["name"] = new_name
-                renamed_count += 1
-                print(f"  → Umbenannt: {old_name} -> {new_name}")
+        # Nur _PLOT_ Namen umbenennen
+        if old_name.startswith('_PLOT_'):
+            new_name = f'_PLOT_{next_number}'
+            area['name'] = new_name
+            print(f"  Umbenannt: {old_name} → {new_name}")
+            next_number += 1
     
-    return data, renamed_count
+    return json_data
 
 
 def parse_plots(json_data: dict) -> List[Plot]:
@@ -205,6 +158,9 @@ def parse_plots(json_data: dict) -> List[Plot]:
         area_zones = zone_data.get("areaZones", [])
         
         for area in area_zones:
+            # Plot-ID
+            plot_id = area.get("id", 0)
+            
             # Plot-Name
             name = area.get("name", "Unknown")
             
@@ -260,85 +216,192 @@ def parse_plots(json_data: dict) -> List[Plot]:
                     x_max=x_max,
                     z_max=z_max,
                     dimension=dimension,
-                    original_area_data=area
+                    plot_id=plot_id
                 )
                 plots.append(plot)
     
     return plots
 
 
-def merge_adjacent_plots(plots: List[Plot]) -> Tuple[List[Plot], List[str]]:
-    """
-    Führt angrenzende Plots desselben Besitzers zusammen.
-    Gibt die zusammengeführten Plots und eine Liste der entfernten Plot-Namen zurück.
-    """
-    if not plots:
-        return plots, []
+def read_merge_list(filename: str = "grundstücke.txt") -> Set[int]:
+    """Liest die Liste der zu mergenden Plot-IDs"""
+    if not os.path.exists(filename):
+        # Erstelle leere Datei mit Anleitung
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write("# Trage hier die IDs der Grundstücke ein, die zusammengeführt werden sollen\n")
+            f.write("# Eine ID pro Zeile\n")
+            f.write("# Beispiel:\n")
+            f.write("# 3\n")
+            f.write("# 4\n")
+            f.write("# 7\n")
+        return set()
     
-    merged = True
-    result = plots[:]
-    removed_names = []
+    plot_ids = set()
+    with open(filename, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # Ignoriere Kommentare und leere Zeilen
+            if line and not line.startswith('#'):
+                try:
+                    plot_ids.add(int(line))
+                except ValueError:
+                    print(f"Warnung: Ungültige ID ignoriert: {line}")
     
-    while merged:
-        merged = False
-        new_result = []
-        used = set()
-        
-        for i, plot1 in enumerate(result):
-            if i in used:
-                continue
-            
-            # Versuche plot1 mit anderen Plots zu mergen
-            merged_plot = plot1
-            for j, plot2 in enumerate(result):
-                if i >= j or j in used:
-                    continue
-                
-                if merged_plot.can_merge(plot2):
-                    merged_plot = Plot.merge(merged_plot, plot2)
-                    removed_names.append(plot2.name)
-                    used.add(j)
-                    merged = True
-            
-            new_result.append(merged_plot)
-            used.add(i)
-        
-        result = new_result
-    
-    return result, removed_names
+    return plot_ids
 
 
-def update_json_with_merged_plots(json_data: dict, merged_plots: List[Plot], removed_names: List[str]) -> dict:
-    """
-    Aktualisiert die JSON-Daten mit den zusammengeführten Plots.
-    Entfernt die alten Plots und fügt die zusammengeführten ein.
-    """
-    data = deepcopy(json_data)
-    world_zones = data.get("worldZones", {})
+def clear_merge_list(filename: str = "grundstücke.txt"):
+    """Leert die Merge-Liste nach erfolgreicher Zusammenführung"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write("# Trage hier die IDs der Grundstücke ein, die zusammengeführt werden sollen\n")
+        f.write("# Eine ID pro Zeile\n")
+        f.write("# Beispiel:\n")
+        f.write("# 3\n")
+        f.write("# 4\n")
+        f.write("# 7\n")
+
+
+def merge_plots_by_ids(json_data: dict, plot_ids: Set[int]) -> dict:
+    """Führt Plots mit den angegebenen IDs zusammen"""
+    if not plot_ids:
+        return json_data
     
-    # Entferne die Plots die zusammengeführt wurden
+    print(f"\nSuche Plots mit IDs: {sorted(plot_ids)}")
+    
+    # Finde die Plots in der JSON
+    plots_to_merge = []
+    world_zones = json_data.get("worldZones", {})
+    
     for dim_id_str, zone_data in world_zones.items():
         area_zones = zone_data.get("areaZones", [])
-        zone_data["areaZones"] = [
-            area for area in area_zones 
-            if area.get("name") not in removed_names
-        ]
+        for i, area in enumerate(area_zones):
+            if area.get("id") in plot_ids:
+                plots_to_merge.append({
+                    'dimension': dim_id_str,
+                    'index': i,
+                    'area': area
+                })
     
-    # Aktualisiere die Koordinaten der zusammengeführten Plots
-    for plot in merged_plots:
-        dim_id_str = str(plot.dimension)
-        if dim_id_str in world_zones:
-            area_zones = world_zones[dim_id_str].get("areaZones", [])
-            for area in area_zones:
-                if area.get("name") == plot.name:
-                    # Update coordinates
-                    area["area"]["low"]["x"] = plot.x_min
-                    area["area"]["low"]["z"] = plot.z_min
-                    area["area"]["high"]["x"] = plot.x_max
-                    area["area"]["high"]["z"] = plot.z_max
+    if len(plots_to_merge) < 2:
+        print(f"Warnung: Nur {len(plots_to_merge)} Plot(s) gefunden, mindestens 2 benötigt")
+        return json_data
+    
+    # Parse die Plots
+    parsed_plots = []
+    for plot_info in plots_to_merge:
+        area = plot_info['area']
+        dimension = int(plot_info['dimension'])
+        
+        # Besitzer extrahieren
+        owner_uuid = None
+        owner_name = "Unknown"
+        
+        group_perms = area.get("groupPermissions", {})
+        for group, perms in group_perms.items():
+            if "fe.internal.plot.owner" in perms:
+                owner_uuid = perms["fe.internal.plot.owner"]
+                break
+        
+        player_perms = area.get("playerPermissions", {})
+        for player_key, perms in player_perms.items():
+            if "PLOT_OWNER" in perms.get("fe.internal.player.groups", ""):
+                if "|" in player_key:
+                    parts = player_key.strip("()").split("|")
+                    if len(parts) == 2 and parts[0] == owner_uuid:
+                        owner_name = parts[1]
+                        break
+        
+        # Koordinaten
+        area_coords = area.get("area", {})
+        low = area_coords.get("low", {})
+        high = area_coords.get("high", {})
+        
+        plot = Plot(
+            name=area.get("name", "Unknown"),
+            display_name=area.get("name", "Unknown"),
+            owner_uuid=owner_uuid,
+            owner_name=owner_name,
+            x_min=low.get("x", 0),
+            z_min=low.get("z", 0),
+            x_max=high.get("x", 0),
+            z_max=high.get("z", 0),
+            dimension=dimension,
+            plot_id=area.get("id", 0)
+        )
+        parsed_plots.append({
+            'plot': plot,
+            'dimension': plot_info['dimension'],
+            'index': plot_info['index'],
+            'area': area
+        })
+    
+    # Prüfe ob alle Plots denselben Besitzer haben
+    owners = set(p['plot'].owner_uuid for p in parsed_plots)
+    if len(owners) > 1:
+        print(f"Fehler: Plots gehören verschiedenen Besitzern: {owners}")
+        return json_data
+    
+    # Prüfe ob alle Plots in derselben Dimension sind
+    dimensions = set(p['plot'].dimension for p in parsed_plots)
+    if len(dimensions) > 1:
+        print(f"Fehler: Plots sind in verschiedenen Dimensionen: {dimensions}")
+        return json_data
+    
+    # Versuche Plots zu mergen
+    result_plots = [p['plot'] for p in parsed_plots]
+    merged = True
+    
+    while merged and len(result_plots) > 1:
+        merged = False
+        for i in range(len(result_plots)):
+            for j in range(i + 1, len(result_plots)):
+                if result_plots[i].can_merge(result_plots[j]):
+                    new_plot = Plot.merge(result_plots[i], result_plots[j])
+                    result_plots = [p for k, p in enumerate(result_plots) if k != i and k != j]
+                    result_plots.append(new_plot)
+                    merged = True
+                    print(f"  Zusammengeführt: Plot {parsed_plots[i]['plot'].plot_id} + Plot {parsed_plots[j]['plot'].plot_id}")
                     break
+            if merged:
+                break
     
-    return data
+    if len(result_plots) > 1:
+        print(f"Warnung: Plots können nicht zu einem rechteckigen Grundstück zusammengeführt werden")
+        return json_data
+    
+    # Aktualisiere JSON
+    merged_plot = result_plots[0]
+    dimension = parsed_plots[0]['dimension']
+    
+    # Entferne alte Plots (sortiere absteigend nach Index)
+    sorted_plots = sorted(parsed_plots, key=lambda x: x['index'], reverse=True)
+    for plot_info in sorted_plots:
+        del world_zones[dimension]['areaZones'][plot_info['index']]
+    
+    # Erstelle neuen Plot-Eintrag
+    first_area = parsed_plots[0]['area']
+    new_area = deepcopy(first_area)
+    new_area['name'] = f"_PLOT_MERGED_{merged_plot.plot_id}"
+    new_area['area']['low'] = {
+        'x': merged_plot.x_min,
+        'y': 0,
+        'z': merged_plot.z_min
+    }
+    new_area['area']['high'] = {
+        'x': merged_plot.x_max,
+        'y': 256,
+        'z': merged_plot.z_max
+    }
+    new_area['id'] = merged_plot.plot_id
+    
+    # Füge zusammengeführten Plot hinzu
+    world_zones[dimension]['areaZones'].append(new_area)
+    
+    print(f"  Erfolgreich zusammengeführt zu Plot ID {merged_plot.plot_id}")
+    print(f"  Neue Koordinaten: X: {merged_plot.x_min} bis {merged_plot.x_max}, Z: {merged_plot.z_min} bis {merged_plot.z_max}")
+    print(f"  Fläche: {merged_plot.get_area_formatted()}")
+    
+    return json_data
 
 
 def generate_html_map(plots: List[Plot], output_file: str = "plot_map.html"):
@@ -372,8 +435,8 @@ def generate_html_map(plots: List[Plot], output_file: str = "plot_map.html"):
                 'z_min': plot.z_min,
                 'x_max': plot.x_max,
                 'z_max': plot.z_max,
-                'area_m2': plot.get_area_m2(),
-                'area_display': plot.get_area_display(),
+                'area': plot.get_area_m2(),
+                'area_formatted': plot.get_area_formatted(),
                 'price': plot.get_price(),
                 'color': uuid_to_color(plot.owner_uuid)
             })
@@ -729,7 +792,7 @@ def generate_html_map(plots: List[Plot], output_file: str = "plot_map.html"):
                 <div class="plot-info">
                     <div><strong>Besitzer:</strong> ${{plot.owner}}</div>
                     <div><strong>Koordinaten:</strong> X: ${{plot.x_min}} bis ${{plot.x_max}}, Z: ${{plot.z_min}} bis ${{plot.z_max}}</div>
-                    <div><strong>Fläche:</strong> ${{plot.area_display}}</div>
+                    <div><strong>Fläche:</strong> ${{plot.area_formatted}}</div>
                     <div><strong>Kaufpreis:</strong> ${{plot.price.toLocaleString('de-DE')}} €</div>
                 </div>
             `;
@@ -810,7 +873,7 @@ def generate_html_map(plots: List[Plot], output_file: str = "plot_map.html"):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
-    print(f"✓ HTML-Karte erfolgreich erstellt: {output_file}")
+    print(f"HTML-Karte erfolgreich erstellt: {output_file}")
 
 
 def main():
@@ -819,111 +882,70 @@ def main():
     
     if len(sys.argv) < 2:
         print("Verwendung: python plot_map_generator.py <json_datei> [output.html]")
-        print("\nDas Skript wird:")
-        print("  1. Plot-Namen neu nummerieren (_PLOT_1, _PLOT_2, ...)")
-        print("  2. Angrenzende Plots desselben Besitzers zusammenführen")
-        print("  3. Die JSON-Datei mit den Änderungen überschreiben")
-        print("  4. Eine interaktive HTML-Karte erstellen")
         sys.exit(1)
     
     json_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else "plot_map.html"
     
-    print("=" * 70)
-    print("MINECRAFT PLOT MAP GENERATOR")
-    print("=" * 70)
-    
     # JSON-Datei laden
-    print(f"\n[1/5] Lade JSON-Datei: {json_file}")
+    print(f"Lade JSON-Datei: {json_file}")
     with open(json_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    print("✓ JSON-Datei geladen")
     
-    # Plots neu nummerieren
-    print(f"\n[2/5] Nummeriere Plots neu...")
-    data, renamed_count = renumber_plots(data)
-    if renamed_count > 0:
-        print(f"✓ {renamed_count} Plot(s) wurden umbenannt")
+    # Plots sequenziell umbenennen
+    print("\n=== Sequenzielle Umbenennung ===")
+    data = rename_plots_sequential(data)
     
-    # Plots extrahieren
-    print(f"\n[3/5] Extrahiere Plots...")
-    plots = parse_plots(data)
-    print(f"✓ {len(plots)} Plot(s) gefunden")
+    # Merge-Liste lesen
+    print("\n=== Merge-Liste lesen ===")
+    merge_ids = read_merge_list("grundstücke.txt")
     
-    # Plots zusammenführen
-    print(f"\n[4/5] Führe angrenzende Plots zusammen...")
-    original_count = len(plots)
-    merged_plots, removed_names = merge_adjacent_plots(plots)
-    merged_count = original_count - len(merged_plots)
-    
-    if merged_count > 0:
-        print(f"✓ {merged_count} Plot(s) wurden zusammengeführt")
-        print(f"✓ {len(merged_plots)} Plot(s) nach Zusammenführung")
+    if merge_ids:
+        print(f"Gefunden: {len(merge_ids)} Plot-IDs zum Zusammenführen")
+        data = merge_plots_by_ids(data, merge_ids)
         
         # JSON aktualisieren
-        data = update_json_with_merged_plots(data, merged_plots, removed_names)
-    else:
-        print("✓ Keine angrenzenden Plots zum Zusammenführen gefunden")
-    
-    # JSON-Datei überschreiben wenn Änderungen vorgenommen wurden
-    if renamed_count > 0 or merged_count > 0:
-        print(f"\n[5/5] Überschreibe JSON-Datei mit Änderungen...")
+        print("\nAktualisiere JSON-Datei...")
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        print(f"✓ JSON-Datei aktualisiert: {json_file}")
+        print(f"  JSON-Datei aktualisiert: {json_file}")
+        
+        # Merge-Liste leeren
+        clear_merge_list("grundstücke.txt")
+        print("  Merge-Liste geleert")
     else:
-        print(f"\n[5/5] Keine Änderungen - JSON-Datei bleibt unverändert")
+        print("Keine Plots zum Zusammenführen gefunden")
+    
+    # Plots extrahieren
+    print("\n=== Plots extrahieren ===")
+    plots = parse_plots(data)
+    print(f"  → {len(plots)} Plots gefunden")
     
     # HTML-Karte generieren
-    print(f"\n[6/6] Generiere HTML-Karte...")
-    generate_html_map(merged_plots, output_file)
+    print(f"\n=== HTML-Karte generieren ===")
+    generate_html_map(plots, output_file)
     
     # Statistiken
-    print("\n" + "=" * 70)
-    print("STATISTIKEN")
-    print("=" * 70)
-    total_area = sum(plot.get_area_m2() for plot in merged_plots)
-    total_price = sum(plot.get_price() for plot in merged_plots)
+    print("\n=== Statistiken ===")
+    total_area = sum(plot.get_area_m2() for plot in plots)
+    total_price = sum(plot.get_price() for plot in plots)
     
     if total_area > 10000:
-        print(f"Gesamtfläche: {total_area / 10000:.2f} ㏊ ({total_area:,} ㎡)".replace(',', '.'))
+        print(f"Gesamtfläche: {total_area / 10000:.2f} ha ({total_area:,} m²)".replace(',', '.'))
     else:
-        print(f"Gesamtfläche: {total_area:,} ㎡".replace(',', '.'))
+        print(f"Gesamtfläche: {total_area:,} m²".replace(',', '.'))
     
     print(f"Gesamtwert: {total_price:,} €".replace(',', '.'))
     
     # Plots nach Dimension
     by_dim = {}
-    for plot in merged_plots:
+    for plot in plots:
         by_dim[plot.dimension] = by_dim.get(plot.dimension, 0) + 1
     
     print("\nPlots pro Dimension:")
-    dimension_names = {-1: "Nether", 0: "Oberwelt", 1: "Ende", -2147483648: "Mystcraft"}
     for dim, count in sorted(by_dim.items()):
-        dim_name = dimension_names.get(dim, f"Dimension {dim}")
+        dim_name = {-1: "Nether", 0: "Oberwelt", 1: "Ende", -2147483648: "Mystcraft"}.get(dim, f"Dimension {dim}")
         print(f"  {dim_name}: {count}")
-    
-    # Besitzer-Statistiken
-    by_owner = {}
-    for plot in merged_plots:
-        owner = plot.owner_name
-        if owner not in by_owner:
-            by_owner[owner] = {'count': 0, 'area': 0}
-        by_owner[owner]['count'] += 1
-        by_owner[owner]['area'] += plot.get_area_m2()
-    
-    print("\nPlots pro Besitzer:")
-    for owner, stats in sorted(by_owner.items(), key=lambda x: x[1]['area'], reverse=True):
-        area = stats['area']
-        if area > 10000:
-            area_str = f"{area / 10000:.2f} ㏊"
-        else:
-            area_str = f"{area:,} ㎡".replace(',', '.')
-        print(f"  {owner}: {stats['count']} Plot(s), {area_str}")
-    
-    print("\n" + "=" * 70)
-    print("✓ FERTIG!")
-    print("=" * 70)
 
 
 if __name__ == "__main__":
