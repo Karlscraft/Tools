@@ -168,16 +168,17 @@
     <div class="layer-control">
         <h3>🗺️ Kartenebenen</h3>
         <label>
-            <input type="radio" name="layer" value="osm" checked>
+            <input type="radio" name="baseLayer" value="osm" checked>
             OpenStreetMap
         </label>
         <label>
-            <input type="radio" name="layer" value="topo">
+            <input type="radio" name="baseLayer" value="topo">
             OpenTopoMap
         </label>
+        <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
         <label>
-            <input type="radio" name="layer" value="railway">
-            OpenRailwayMap
+            <input type="checkbox" id="railwayToggle">
+            OpenRailwayMap (Overlay)
         </label>
     </div>
     
@@ -215,32 +216,39 @@
             maxZoom: 17
         });
         
+        // Hinweis: OpenRailwayMap liefert NUR die Bahninfrastruktur auf
+        // transparentem Hintergrund - keine Straßen, Gebäude o.ä. Es ist als
+        // Overlay über einer Basiskarte gedacht, nicht als eigene Basiskarte.
         const railwayLayer = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
             attribution: '© OpenRailwayMap contributors',
-            maxZoom: 19
+            maxZoom: 19,
+            subdomains: 'abc'
         });
         
-        // Standardlayer hinzufügen
+        // Standard-Basiskarte hinzufügen
         osmLayer.addTo(map);
-        let currentLayer = osmLayer;
+        let currentBaseLayer = osmLayer;
         
-        // Layer-Steuerung
-        document.querySelectorAll('input[name="layer"]').forEach(radio => {
+        // Basiskarten-Steuerung (OSM / Topo - gegenseitig exklusiv)
+        document.querySelectorAll('input[name="baseLayer"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
-                map.removeLayer(currentLayer);
-                switch(e.target.value) {
-                    case 'osm':
-                        currentLayer = osmLayer;
-                        break;
-                    case 'topo':
-                        currentLayer = topoLayer;
-                        break;
-                    case 'railway':
-                        currentLayer = railwayLayer;
-                        break;
+                map.removeLayer(currentBaseLayer);
+                currentBaseLayer = (e.target.value === 'topo') ? topoLayer : osmLayer;
+                currentBaseLayer.addTo(map);
+                // Railway-Overlay ggf. wieder über die neue Basiskarte legen
+                if (map.hasLayer(railwayLayer)) {
+                    railwayLayer.bringToFront();
                 }
-                currentLayer.addTo(map);
             });
+        });
+        
+        // Railway-Overlay-Steuerung (unabhängig zuschaltbar, liegt über der Basiskarte)
+        document.getElementById('railwayToggle').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                railwayLayer.addTo(map);
+            } else {
+                map.removeLayer(railwayLayer);
+            }
         });
         
         // Marker für Nullpunkt
