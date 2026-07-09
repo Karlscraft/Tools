@@ -176,9 +176,30 @@
             OpenTopoMap
         </label>
         <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="font-size: 13px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">🚆 OpenRailwayMap</p>
         <label>
-            <input type="checkbox" id="railwayToggle">
-            OpenRailwayMap (Overlay)
+            <input type="radio" name="railwayStyle" value="off" checked>
+            Aus
+        </label>
+        <label>
+            <input type="radio" name="railwayStyle" value="standard">
+            Standard
+        </label>
+        <label>
+            <input type="radio" name="railwayStyle" value="maxspeed">
+            Höchstgeschwindigkeit
+        </label>
+        <label>
+            <input type="radio" name="railwayStyle" value="signals">
+            Signale
+        </label>
+        <label>
+            <input type="radio" name="railwayStyle" value="electrification">
+            Elektrifizierung
+        </label>
+        <label>
+            <input type="radio" name="railwayStyle" value="gauge">
+            Spurweite
         </label>
     </div>
     
@@ -219,11 +240,25 @@
         // Hinweis: OpenRailwayMap liefert NUR die Bahninfrastruktur auf
         // transparentem Hintergrund - keine Straßen, Gebäude o.ä. Es ist als
         // Overlay über einer Basiskarte gedacht, nicht als eigene Basiskarte.
-        const railwayLayer = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
-            attribution: '© OpenRailwayMap contributors',
-            maxZoom: 19,
-            subdomains: 'abc'
-        });
+        // Jeder Stil zeichnet das komplette Streckennetz, nur unterschiedlich
+        // eingefärbt/beschriftet - deshalb ist jeweils nur EIN Stil gleichzeitig
+        // aktiv, nicht mehrere übereinander (siehe tiles.openrailwaymap.org).
+        function createRailwayLayer(style) {
+            return L.tileLayer(`https://{s}.tiles.openrailwaymap.org/${style}/{z}/{x}/{y}.png`, {
+                attribution: '© OpenRailwayMap contributors',
+                maxZoom: 19,
+                subdomains: 'abc'
+            });
+        }
+        
+        const railwayLayers = {
+            standard: createRailwayLayer('standard'),
+            maxspeed: createRailwayLayer('maxspeed'),
+            signals: createRailwayLayer('signals'),
+            electrification: createRailwayLayer('electrification'),
+            gauge: createRailwayLayer('gauge')
+        };
+        let currentRailwayLayer = null; // aktuell kein Overlay aktiv ("Aus")
         
         // Standard-Basiskarte hinzufügen
         osmLayer.addTo(map);
@@ -236,19 +271,25 @@
                 currentBaseLayer = (e.target.value === 'topo') ? topoLayer : osmLayer;
                 currentBaseLayer.addTo(map);
                 // Railway-Overlay ggf. wieder über die neue Basiskarte legen
-                if (map.hasLayer(railwayLayer)) {
-                    railwayLayer.bringToFront();
+                if (currentRailwayLayer) {
+                    currentRailwayLayer.bringToFront();
                 }
             });
         });
         
-        // Railway-Overlay-Steuerung (unabhängig zuschaltbar, liegt über der Basiskarte)
-        document.getElementById('railwayToggle').addEventListener('change', (e) => {
-            if (e.target.checked) {
-                railwayLayer.addTo(map);
-            } else {
-                map.removeLayer(railwayLayer);
-            }
+        // Railway-Stil-Steuerung (gegenseitig exklusiv; "Aus" entfernt jedes Overlay)
+        document.querySelectorAll('input[name="railwayStyle"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (currentRailwayLayer) {
+                    map.removeLayer(currentRailwayLayer);
+                    currentRailwayLayer = null;
+                }
+                const style = e.target.value;
+                if (style !== 'off') {
+                    currentRailwayLayer = railwayLayers[style];
+                    currentRailwayLayer.addTo(map);
+                }
+            });
         });
         
         // Marker für Nullpunkt
