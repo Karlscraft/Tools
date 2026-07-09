@@ -2,27 +2,29 @@
 
 > ℹ️ **Wichtiger Hinweis:** Dieser Ratgeber ist **nicht bindend**. Er soll dir den Einstieg erleichtern und dir das Gameplay verständlich erklären. Alle verbindlichen Regeln, Rechte und Strafen findest du ausschließlich im **[Regelwerk](https://github.com/Karlscraft/Regelwerk/wiki)**. Im Zweifel gilt immer das Regelwerk, nicht dieser Leitfaden.
 
----
+-----
 
 ## 📜 Inhaltsverzeichnis
 
 1. [🏙️ Was ist Karlscraft?](#️-was-ist-karlscraft)
-2. [🚦 Bevor du loslegst: Die Verifizierung](#-bevor-du-loslegst-die-verifizierung)
-3. [🎁 Deine Starterausrüstung](#-deine-starterausrüstung)
-4. [⏳ Zeit auf Karlscraft](#-zeit-auf-karlscraft)
-5. [🥶 Überleben: Jahreszeiten, Temperatur & Ernährung](#-überleben-jahreszeiten-temperatur--ernährung)
-6. [💶 Geld verdienen & die Wirtschaft](#-geld-verdienen--die-wirtschaft)
-7. [🪙 Bargeld](#-bargeld)
-8. [💰 Dein erstes Geld verdienen](#-dein-erstes-geld-verdienen)
-9. [🏡 Grundstücke kaufen & bebauen](#-grundstücke-kaufen--bebauen)
-10. [🎭 Roleplay & Proximity-Chat](#-roleplay--proximity-chat)
-11. [💬 Der Ingame-Chat](#-der-ingame-chat)
-12. [🌳 Kein Bock auf Bauen oder Roleplay?](#-kein-bock-auf-bauen-oder-roleplay)
-13. [🛠️ Nützliche Tools](#️-nützliche-tools)
-14. [🆘 Server offline? Hier bekommst du Hilfe](#-server-offline-hier-bekommst-du-hilfe)
-15. [✅ Checkliste für den Einstieg](#-checkliste-für-den-einstieg)
+1. [🚦 Bevor du loslegst: Die Verifizierung](#-bevor-du-loslegst-die-verifizierung)
+1. [🎁 Deine Starterausrüstung](#-deine-starterausrüstung)
+1. [⏳ Zeit auf Karlscraft](#-zeit-auf-karlscraft)
+1. [🥶 Überleben: Jahreszeiten, Temperatur & Ernährung](#-überleben-jahreszeiten-temperatur--ernährung)
+1. [🚑 Schwerverletzt & Rettungspflicht](#-schwerverletzt--rettungspflicht)
+1. [💶 Geld verdienen & die Wirtschaft](#-geld-verdienen--die-wirtschaft)
+1. [🪙 Bargeld](#-bargeld)
+1. [💰 Dein erstes Geld verdienen](#-dein-erstes-geld-verdienen)
+1. [🏡 Grundstücke kaufen & bebauen](#-grundstücke-kaufen--bebauen)
+1. [🎭 Roleplay & Proximity-Chat](#-roleplay--proximity-chat)
+1. [💬 Der Ingame-Chat](#-der-ingame-chat)
+1. [⚖️ Recht & Ordnung: Anzeigen, Gericht & Support](#️-recht--ordnung-anzeigen-gericht--support)
+1. [🌳 Kein Bock auf Bauen oder Roleplay?](#-kein-bock-auf-bauen-oder-roleplay)
+1. [🛠️ Nützliche Tools](#️-nützliche-tools)
+1. [🆘 Server offline? Hier bekommst du Hilfe](#-server-offline-hier-bekommst-du-hilfe)
+1. [✅ Checkliste für den Einstieg](#-checkliste-für-den-einstieg)
 
----
+-----
 
 ## 🏙️ Was ist Karlscraft?
 
@@ -32,7 +34,7 @@ Das macht Karlscraft zu mehr als nur einem normalen Survival-Server. Du baust ni
 
 Damit das alles fair und geordnet abläuft, gibt es ein **[Regelwerk](https://github.com/Karlscraft/Regelwerk/wiki)**, das für **alle** Spieler verbindlich ist. Lies es dir unbedingt durch – dieser Ratgeber hilft dir nur beim *Verstehen und Einsteigen*, ersetzt das Regelwerk aber nicht.
 
----
+-----
 
 ## 🚦 Bevor du loslegst: Die Verifizierung
 
@@ -42,7 +44,7 @@ Um das zu ändern, brauchst du die Rolle **[Bewohner]**. Diese erhältst du, ind
 
 > 🔑 Ohne die [Bewohner]-Rolle ist das Spielen auf Karlscraft **nicht möglich** – die Verifizierung ist also dein allererster Schritt, noch bevor irgendetwas anderes Sinn ergibt.
 
----
+-----
 
 ## 🎁 Deine Starterausrüstung
 
@@ -53,7 +55,7 @@ Beim allerersten Join schenkt dir der Server zwei nützliche Pakete:
 
 Diese Ausrüstung ist als Starthilfe gedacht – sie hält dich am Anfang über Wasser, ersetzt aber keine vernünftige Ausrüstung, die du dir im Laufe des Spiels selbst erarbeitest.
 
----
+-----
 
 ## ⏳ Zeit auf Karlscraft
 
@@ -64,37 +66,74 @@ Wichtig dabei:
 - ⏱️ Die Ingame-Zeit läuft **komplett unabhängig von der Reallife-Zeit** – sie ist also nicht etwa 1:1 mit deiner Uhr synchronisiert, sondern hat ihren eigenen, separaten Rhythmus.
 - ⏸️ **Ist kein Spieler online, bleibt die Zeit komplett stehen.** Das bedeutet: Maschinen arbeiten nicht weiter, Pflanzen wachsen nicht weiter – die ganze Welt pausiert quasi, bis wieder jemand einloggt.
 
-Das hat einen angenehmen Nebeneffekt: Du musst dir keine Sorgen machen, dass dir während du offline bist die Ernte verdirbt oder Maschinen "leerlaufen".
+Das hat einen angenehmen Nebeneffekt: Du musst dir keine Sorgen machen, dass dir während du offline bist die Ernte verdirbt oder Maschinen “leerlaufen”.
 
----
+-----
 
 ## 🥶 Überleben: Jahreszeiten, Temperatur & Ernährung
 
 Karlscraft simuliert das Überleben deutlich realistischer als Standard-Minecraft. Drei Systeme arbeiten dabei zusammen:
 
 ### 🍂 Jahreszeiten
+
 Es gibt echte Jahreszeiten, die sich auf Klima und Spielgefühl auswirken.
 
 ### 🌡️ Körpertemperatur
+
 Du hast eine Körpertemperatur, die schwankt:
+
 - **Nachts und im Winter** wird es kälter.
 - **Tagsüber und im Sommer** wird es wärmer.
 
 Das ist auch der Grund, warum du als Neuling direkt eine Arktisrüstung bekommst – ohne ausreichenden Kälteschutz wird vor allem der Winter und die Nacht ziemlich ungemütlich.
 
 ### 💧 Durst
+
 Zusätzlich zum klassischen Hunger gibt es auch **Durst**. Du solltest also nicht nur ans Essen, sondern auch ans Trinken denken.
 
 ### 🍗 Ernährung
+
 Beim Essen kommt es nicht nur auf die Menge an, sondern auch auf die **Abwechslung**. Es gilt: **je häufiger du das gleiche Nahrungsmittel hintereinander isst, desto geringer wird sein Nährwert.** Wer sich also nur von einer Sorte Essen ernährt, wird auf Dauer schlechter satt. Eine ausgewogene, abwechslungsreiche Ernährung lohnt sich also nicht nur fürs Roleplay-Feeling, sondern ist mechanisch sinnvoll.
 
----
+-----
+
+## 🚑 Schwerverletzt & Rettungspflicht
+
+Auf Karlscraft stirbst du **nicht** einfach so. Wenn deine Gesundheit auf null sinkt, trittst du nicht in den klassischen Minecraft-Tod ein – du wirst **schwerverletzt**. Du liegst hilflos am Boden und bist zunächst auf die Hilfe anderer Spieler angewiesen.
+
+### ⏱️ Du hast maximal 60 Minuten
+
+Du hast **60 Minuten**, um wiederbelebt zu werden – andernfalls verstirbt dein Charakter **endgültig**. Das ist kein gewöhnlicher Tod mit anschließendem Respawn: Ein endgültiger Charaktertod hat echte Konsequenzen im Roleplay und sollte unbedingt vermieden werden.
+
+### 📍 Niemand sieht automatisch, wo du liegst
+
+Rettungskräfte erhalten **keinerlei automatische Standortinformation** – dein Aufenthaltsort ist für andere Spieler unsichtbar. Du bist aber ausdrücklich **berechtigt**, deinen ungefähren Standort über den **Schriftchat** oder den **Proximity-Chat** mitzuteilen. Das ist ausdrücklich **kein Roleplay-Verstoß**, sondern sogar erwünscht.
+
+### 🆘 Die Rettungspflicht anderer Spieler
+
+Jeder Spieler, der von deiner Notlage erfährt und in der Lage ist zu helfen, ist dazu **verpflichtet**. Das bedeutet konkret:
+
+- 🏥 Den Verletzten **bis zum Eintreffen eines Notarztes betreuen**, oder
+- 💉 ihn **direkt wiederbeleben**.
+
+Eine Belohnung gibt es dafür nicht – es ist eine Bürgerpflicht. Die Rettungspflicht ist im **[§ 19 des Regelwerks](https://github.com/Karlscraft/Regelwerk/wiki/§-19-–-Schwerverletzte-Spieler)** verankert.
+
+### ⚠️ Unterlassene Hilfeleistung ist strafbar
+
+Wer einen schwerverletzten Spieler ignoriert, obwohl Hilfe möglich und zumutbar gewesen wäre, begeht eine **In-Character-Straftat** gemäß **[§ 8](https://github.com/Karlscraft/Regelwerk/wiki/§-8-–-Strafbestimmungen)** – die Sache landet dann vor dem serverinternen Gericht. Voraussetzung ist natürlich, dass sich nachweisen lässt, dass geholfen werden hätte können.
+
+### 🔄 Du kannst auch selbst entscheiden
+
+Du musst nicht auf Rettung warten. Innerhalb der 60 Minuten kannst du **jederzeit selbst entscheiden**, deinen Zustand vorzeitig zu beenden und zu respawnen – auf eigenes Risiko.
+
+-----
 
 ## 💶 Geld verdienen & die Wirtschaft
 
 Jeder Spieler besitzt ein **virtuelles Konto**, auf dem sich Geld ansammelt. Die Währung auf Karlscraft heißt **EURO** (€) – Centbeträge gibt es ausschließlich beim Bargeld, nicht auf dem digitalen Konto.
 
 Mit deinem Geld kannst du zum Beispiel:
+
 - 🏠 Grundstücke kaufen
 - 🧑‍🔧 Dienstleistungen bezahlen
 - 💸 Überweisungen an andere Spieler tätigen
@@ -105,7 +144,7 @@ Mit deinem Geld kannst du zum Beispiel:
 - 📦 **Durch den Verkauf von Items** an den Server.
 - 🤝 **Durch Überweisungen** von anderen Spielern.
 
----
+-----
 
 ## 🪙 Bargeld
 
@@ -116,29 +155,29 @@ Neben dem digitalen Konto gibt es auf Karlscraft auch ein **offizielles Bargelds
 - 🚫 Münzen können **nicht selbst geprägt** werden. Sie werden ausschließlich vom **Admin oder den Operatoren** ausgehändigt.
 - 🏠 Eine wichtige Ausnahme: **Grundstücke können nicht mit Bargeld bezahlt werden** – dafür brauchst du Guthaben auf deinem digitalen Konto.
 
----
+-----
 
 ## 💰 Dein erstes Geld verdienen
 
 Du stehst frisch verifiziert auf dem Server und hast noch kein Geld? Der klassische Einstieg ist simpel:
 
 1. 🌲 **Sammle massenhaft Holz.**
-2. 💰 **Verkaufe es an den Server** mit dem Befehl `/sell`.
+1. 💰 **Verkaufe es an den Server** mit dem Befehl `/sell`.
 
 Dabei musst du den Gegenstand, den du verkaufen möchtest, **in der Hand halten**. Je nach Situation musst du den Verkauf anschließend noch mit `/ja` bestätigen.
 
 Das ist der schnellste und einfachste Weg, um dir dein Startkapital zu erspielen, bevor du dich an größere Projekte wie ein eigenes Grundstück wagst.
 
----
+-----
 
 ## 🏡 Grundstücke kaufen & bebauen
 
-Sobald du etwas Guthaben angesammelt hast, kannst du dir ein eigenes Stück Karlsruhe sichern! So funktioniert's:
+Sobald du etwas Guthaben angesammelt hast, kannst du dir ein eigenes Stück Karlsruhe sichern! So funktioniert’s:
 
 1. 📍 Markiere die erste Ecke deines gewünschten Grundstücks mit `//pos1`.
-2. 📍 Markiere die gegenüberliegende Ecke mit `//pos2`.
-3. 🏠 Kaufe das Grundstück mit `/plot claim`.
-4. ✅ Bestätige den Kauf mit `/ja` – vorausgesetzt, du hast genug Guthaben auf deinem Konto.
+1. 📍 Markiere die gegenüberliegende Ecke mit `//pos2`.
+1. 🏠 Kaufe das Grundstück mit `/plot claim`.
+1. ✅ Bestätige den Kauf mit `/ja` – vorausgesetzt, du hast genug Guthaben auf deinem Konto.
 
 ### Wichtige Regeln rund um Grundstücke
 
@@ -148,31 +187,40 @@ Sobald du etwas Guthaben angesammelt hast, kannst du dir ein eigenes Stück Karl
 - ♾️ Es gibt **kein Limit**, wie viele Grundstücke ein Spieler besitzen darf – allerdings eben mit der oben genannten Verantwortung im Hinterkopf.
 - 🔄 **Wiederverkauf:** Wurde ein Grundstück einmal vom Server gekauft, kann es danach **nur noch an andere Spieler weiterverkauft werden** – ein Rückverkauf an den Server selbst ist nicht mehr möglich.
 
----
+### Inaktivität & aufgegebene Grundstücke
+
+Wer dem Server längere Zeit fernbleibt, riskiert sein Grundstück zu verlieren. Als **inaktiv** gilt ein Spieler, der den Server **mehr als 90 Tage ununterbrochen nicht betreten hat**, ohne die Serveradministration vorher schriftlich über die Abwesenheit informiert zu haben. In einem solchen Fall kann das Grundstück eingefroren, einem anderen Spieler zugeteilt oder vollständig zurückgenommen werden – **ohne Anspruch auf Entschädigung**.
+
+> 💡 Wenn du weißt, dass du längere Zeit weg sein wirst: kurz beim Admin melden, und das Grundstück ist sicher.
+
+-----
 
 ## 🎭 Roleplay & Proximity-Chat
 
 Karlscraft ist in erster Linie ein **Roleplay-Server**, und das Herzstück davon ist der **Proximity Voice Chat**.
 
 ### Wie funktioniert Proximity-Chat?
+
 Statt eines klassischen, serverweiten Voice-Channels hörst du nur Spieler, die sich **in deiner Nähe** befinden – und umgekehrt hören sie auch dich. Je näher ihr euch im Spiel befindet, desto **lauter** hört ihr euch; je weiter weg, desto leiser, bis ihr euch irgendwann gar nicht mehr hört. Genau wie im echten Leben also.
 
-### Du bist nicht "Spieler", du bist Bürger
-Im Roleplay verkörperst du nicht einfach "dich selbst" als Minecraft-Spieler, sondern einen **Bürger der Stadt Karlsruhe**. Das bedeutet, du handelst, sprichst und reagierst so, wie es deine Rolle als Stadtbewohner tun würde – nicht wie ein Spieler, der "nur ein Spiel spielt".
+### Du bist nicht “Spieler”, du bist Bürger
+
+Im Roleplay verkörperst du nicht einfach “dich selbst” als Minecraft-Spieler, sondern einen **Bürger der Stadt Karlsruhe**. Das bedeutet, du handelst, sprichst und reagierst so, wie es deine Rolle als Stadtbewohner tun würde – nicht wie ein Spieler, der “nur ein Spiel spielt”.
 
 ### ⚠️ Out-Of-Character-Gespräche und Metagaming
 
 Damit das Roleplay glaubwürdig und fair bleibt, gibt es zwei zentrale Begriffe, die du unbedingt verstehen musst:
 
-- **Out-Of-Character (OOC)** bedeutet, über Dinge zu sprechen oder zu handeln, die **außerhalb der Spielwelt** liegen – zum Beispiel reale Themen, Server-Mechaniken oder Spieler-Identitäten, anstatt in deiner Rolle als Bürger zu bleiben. Wenn du also plötzlich "aus der Rolle fällst" und wie ein echter Spieler über das Spiel selbst redest, ist das OOC.
-- **Metagaming** bedeutet, **Wissen zu benutzen, das deine Spielfigur eigentlich gar nicht haben könnte** – zum Beispiel Informationen, die du nur durch Discord, den Ingame-Chat oder durch das "Belauschen" von Gesprächen erfahren hast, an denen deine Figur gar nicht beteiligt war, aber trotzdem so im Roleplay zu handeln, als wüsstest du es ganz natürlich.
+- **Out-Of-Character (OOC)** bedeutet, über Dinge zu sprechen oder zu handeln, die **außerhalb der Spielwelt** liegen – zum Beispiel reale Themen, Server-Mechaniken oder Spieler-Identitäten, anstatt in deiner Rolle als Bürger zu bleiben. Wenn du also plötzlich “aus der Rolle fällst” und wie ein echter Spieler über das Spiel selbst redest, ist das OOC.
+- **Metagaming** bedeutet, **Wissen zu benutzen, das deine Spielfigur eigentlich gar nicht haben könnte** – zum Beispiel Informationen, die du nur durch Discord, den Ingame-Chat oder durch das “Belauschen” von Gesprächen erfahren hast, an denen deine Figur gar nicht beteiligt war, aber trotzdem so im Roleplay zu handeln, als wüsstest du es ganz natürlich.
 
 Beides ist auf Karlscraft **ausnahmslos verboten**. Der Grund dafür liegt auf der Hand: Sobald Spieler OOC kommunizieren oder Metagaming betreiben, bricht die Immersion zusammen und das Roleplay wird unfair gegenüber allen, die sich an die Spielwelt halten. Die genauen Konsequenzen bei Verstößen findest du im Regelwerk unter **[§ 8 – Strafbestimmungen](https://github.com/Karlscraft/Regelwerk/wiki/§-8-–-Strafbestimmungen)**.
 
 ### Discord ist kein Ingame-Kommunikationsmittel
+
 Discord wird auf Karlscraft **nicht** verwendet, um während des Spiels miteinander zu kommunizieren. Alles, was im Roleplay passieren soll, läuft über den Proximity-Chat – nicht über Discord-Nachrichten parallel zum Spiel.
 
----
+-----
 
 ## 💬 Der Ingame-Chat
 
@@ -186,7 +234,29 @@ Falls dich der Ingame-Chat eher stört als hilft, kannst du ihn auch komplett au
 
 So bekommst du nur noch die wirklich relevanten Befehlsausgaben angezeigt, ohne vom restlichen Chat-Rauschen abgelenkt zu werden.
 
----
+-----
+
+## ⚖️ Recht & Ordnung: Anzeigen, Gericht & Support
+
+Auf Karlscraft gibt es ein echtes Rechtssystem – und das ist keine Metapher. Sowohl das Polizeipräsidium als auch das Gericht sind **physisch auf dem Server errichtete Gebäude** mitten im Stadtbild. Hier erfährst du, an wen du dich wendest, wenn etwas schiefläuft.
+
+### 🚔 Anzeige gegen einen Spieler: Das Polizeipräsidium
+
+Wenn jemand gegen die Regeln verstößt oder du Zeuge einer In-Character-Straftat wirst, erstattest du eine **Anzeige beim Polizeipräsidium** – dem physischen Gebäude auf dem Server, das als erste Anlaufstelle für Spielerbeschwerden dient. Die Serveradministration prüft die Anzeige und entscheidet, ob ein Verfahren eingeleitet wird.
+
+> Jeder Spieler hat das Recht, Anzeige zu erstatten. Ein Anspruch auf Strafverfolgung besteht jedoch nicht.
+
+### ⚖️ Das serverinterne Gericht
+
+Kommt es zu einem Verfahren, findet dieses im **Gerichtsgebäude** statt. Der Richter ist kein festes Serveramt, sondern eine Spielerrolle: Grundsätzlich kann jeder Spieler als Richter fungieren, sofern beide Parteien ihm ihr Vertrauen aussprechen. Einigt man sich nicht, benennt der Admin einen Richter für den konkreten Fall.
+
+Urteile sind **bindend** und treten sofort in Kraft. Du kannst innerhalb von **72 Stunden** schriftlich beim Admin Einspruch einlegen – die Entscheidung des Admins ist dann endgültig und nicht weiter anfechtbar. Weitere Details findest du unter **[§ 14](https://github.com/Karlscraft/Regelwerk/wiki/§-14-–-Serverinternes-Gericht)** und **[§ 15](https://github.com/Karlscraft/Regelwerk/wiki/§-15-–-Beschwerden-und-Problemmeldungen)** im Regelwerk.
+
+### 🛠️ Technische Probleme & sonstige Anliegen
+
+Technische Fehler, Serverprobleme oder andere nicht-spielerbezogene Anliegen gehören **nicht** ins Polizeipräsidium. Dafür gibt es das öffentliche **[Support-Repository auf GitHub](https://github.com/Karlscraft/Support)** – dort einfach ein Issue erstellen.
+
+-----
 
 ## 🌳 Kein Bock auf Bauen oder Roleplay?
 
@@ -198,20 +268,24 @@ Die Logik dahinter: Je weiter du vom Zentrum entfernt baust, desto unwahrscheinl
 
 ⚠️ Beachte aber: **Admins haben jederzeit das Recht**, bei Bedarf auch weit entfernte, aber **fehlplatzierte** Grundstücke zu räumen. Eine größere Distanz verringert also das Risiko, garantiert dir aber keine absolute Sicherheit.
 
----
+-----
 
 ## 🛠️ Nützliche Tools
 
 Das Karlscraft-Team stellt dir eine Sammlung praktischer Web-Tools zur Verfügung, die dir das Spielen erheblich erleichtern. Alle Tools findest du gesammelt unter **[karlscraft.github.io/Tools](https://karlscraft.github.io/Tools/)**.
 
 ### 📐 [Koordinatenrechner](https://karlscraft.github.io/Tools/Koordinatenrechner/Koordinatenrechner.html)
+
 Eine interaktive Karte, mit der du Grundstücksgrößen exakt ausmessen kannst. Dieses Tool bildet die Grundlage für den 1:1-Maßstab auf dem Server – ideal, um schon vorab zu planen, wo und wie groß du bauen möchtest.
 
 ### 🗺️ [DynMap](https://karlscraft.github.io/Tools/Dynmap/Dynmap.html)
+
 Eine dynamische 3D-Karte des gesamten Karlscraft-Servers. Sie aktualisiert sich live während des Spiels – allerdings **nur verfügbar, wenn der Server online ist**.
 
 ### 🏘️ [Plotkarte](https://karlscraft.github.io/Tools/Plotmap/Plotmap.html)
+
 Eine Übersichtskarte aller vorhandenen Grundstücke auf dem Server. Sie zeigt dir:
+
 - Spielernamen
 - Grundstücksnamen
 - Koordinaten
@@ -219,7 +293,7 @@ Eine Übersichtskarte aller vorhandenen Grundstücke auf dem Server. Sie zeigt d
 
 Die Plotkarte aktualisiert sich bei jedem Server-Stopp – ideal, um dir einen Überblick zu verschaffen, wer wo wohnt und welche Flächen schon vergeben sind.
 
----
+-----
 
 ## 🆘 Server offline? Hier bekommst du Hilfe
 
@@ -233,24 +307,25 @@ Solltest du dich nicht verbinden können, hast du folgende Möglichkeiten:
 In der Regel können unsere **Moderatoren** den Server auch aus der Ferne wieder hochfahren – du musst also nicht zwingend warten, bis jemand zufällig wieder online geht.
 
 ### Woran erkennst du Admin & Moderatoren?
+
 - 🔴 Der **Admin** hat sowohl Ingame als auch auf Discord einen **roten** Namen.
 - 🟢 **Moderatoren** haben jeweils einen **grünen** Namen.
 
----
+-----
 
 ## ✅ Checkliste für den Einstieg
 
 Du willst direkt loslegen, ohne dir den ganzen Ratgeber nochmal durchzulesen? Hier die Kurzfassung für deinen Einstieg:
 
 1. 🔑 **Verifizierung machen**, um die [Bewohner]-Rolle zu erhalten.
-2. 🚪 **Joinen.**
-3. 🌲 **Holz abbauen.**
-4. 💰 **Gegenstände verkaufen** (`/sell`) & Geld verdienen.
-5. 📐 Mit dem **Koordinatenrechner** einen Platz (& ggf. ein Gebäude) zum Bauen raussuchen.
-6. 📍 **Grundstücksecken markieren** (`//pos1` & `//pos2`).
-7. 🏠 **Grundstück kaufen** (`/plot claim` & `/ja`).
-8. 🎉 **Fertig!** Willkommen in Karlsruhe.
+1. 🚪 **Joinen.**
+1. 🌲 **Holz abbauen.**
+1. 💰 **Gegenstände verkaufen** (`/sell`) & Geld verdienen.
+1. 📐 Mit dem **Koordinatenrechner** einen Platz (& ggf. ein Gebäude) zum Bauen raussuchen.
+1. 📍 **Grundstücksecken markieren** (`//pos1` & `//pos2`).
+1. 🏠 **Grundstück kaufen** (`/plot claim` & `/ja`).
+1. 🎉 **Fertig!** Willkommen in Karlsruhe.
 
----
+-----
 
 > 📌 Denk daran: Dieser Ratgeber erklärt dir das **Wie**, aber das **Regelwerk** bestimmt das **Dürfen**. Schau bei Unklarheiten also immer zuerst ins **[Regelwerk](https://github.com/Karlscraft/Regelwerk/wiki)** – und bei allen weiteren Fragen sind Admin und Moderatoren gerne für dich da. Viel Spaß auf Karlscraft! 🏙️
