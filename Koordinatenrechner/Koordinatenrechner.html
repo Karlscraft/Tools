@@ -160,6 +160,122 @@
             color: #e74c3c;
             font-weight: bold;
         }
+
+        .search-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 1000;
+            width: 260px;
+        }
+
+        .search-panel h3 {
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #2c3e50;
+        }
+
+        .search-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 8px 0 4px;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .search-row input {
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+            min-width: 0;
+        }
+
+        .search-row input[type="number"] {
+            width: 60px;
+        }
+
+        .search-row input[type="text"] {
+            flex: 1;
+        }
+
+        .search-row button {
+            padding: 6px 10px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .search-row button:hover {
+            background: #2980b9;
+        }
+
+        .search-status {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #27ae60;
+            min-height: 14px;
+        }
+
+        .search-status.search-error {
+            color: #e74c3c;
+        }
+
+        @media (max-width: 640px) {
+            .layer-control {
+                left: 8px;
+                top: 8px;
+                max-width: 46vw;
+                max-height: 55vh;
+                overflow-y: auto;
+                padding: 10px;
+                font-size: 12px;
+            }
+
+            .layer-control h3 {
+                font-size: 13px;
+            }
+
+            .info-panel {
+                top: 8px;
+                right: 8px;
+                left: auto;
+                max-width: 48vw;
+                max-height: 55vh;
+                overflow-y: auto;
+                padding: 12px;
+                font-size: 12px;
+            }
+
+            .info-panel h2 {
+                font-size: 15px;
+            }
+
+            .info-panel strong {
+                min-width: 0;
+                display: block;
+            }
+
+            .search-panel {
+                left: 8px;
+                right: 8px;
+                bottom: 8px;
+                width: auto;
+                padding: 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -174,6 +290,14 @@
         <label>
             <input type="radio" name="baseLayer" value="topo">
             OpenTopoMap
+        </label>
+        <label>
+            <input type="radio" name="baseLayer" value="satellite">
+            Satellit (Esri)
+        </label>
+        <label>
+            <input type="radio" name="baseLayer" value="lglDop">
+            Luftbild aktuell (LGL BW, 20cm)
         </label>
         <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
         <p style="font-size: 13px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">🚆 OpenRailwayMap</p>
@@ -201,6 +325,31 @@
             <input type="radio" name="railwayStyle" value="gauge">
             Spurweite
         </label>
+        <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
+        <label>
+            <input type="checkbox" id="katasterToggle">
+            🧭 Kataster (Flurstücke)
+        </label>
+        <label>
+            <input type="checkbox" id="cyclingToggle">
+            🚲 Radwege (CyclOSM)
+        </label>
+    </div>
+
+    <div class="search-panel" id="searchPanel">
+        <h3>🔎 Ort finden</h3>
+        <p class="search-label">Minecraft-Koordinate</p>
+        <div class="search-row">
+            <input type="number" id="mcXInput" placeholder="X" step="1">
+            <input type="number" id="mcZInput" placeholder="Z" step="1">
+            <button id="mcGotoBtn">Gehe zu</button>
+        </div>
+        <p class="search-label">Adresse / Ort</p>
+        <div class="search-row">
+            <input type="text" id="addressInput" placeholder="z.B. Kaiserstraße 1">
+            <button id="addressGotoBtn">Suchen</button>
+        </div>
+        <p id="searchStatus" class="search-status"></p>
     </div>
     
     <div class="info-panel" id="infoPanel">
@@ -237,6 +386,34 @@
             maxZoom: 17
         });
         
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles © Esri, Maxar, Earthstar Geographics',
+            maxZoom: 19
+        });
+        
+        // Aktuelles Luftbild (DOP 20cm) - LGL Baden-Württemberg, Open Data.
+        // Layername (IMAGES_DOP_20_RGB) und EPSG:3857-Unterstützung per
+        // GetCapabilities verifiziert. Höher aufgelöst als Esri für die Region.
+        const dopYear = new Date().getFullYear();
+        const lglDopLayer = L.tileLayer.wms('https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C?', {
+            layers: 'IMAGES_DOP_20_RGB',
+            format: 'image/png',
+            transparent: false,
+            version: '1.3.0',
+            attribution: `LGL-BW (${dopYear}) Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de`,
+            maxZoom: 19
+        });
+        
+        const baseLayers = { osm: osmLayer, topo: topoLayer, satellite: satelliteLayer, lglDop: lglDopLayer };
+        
+        // Radwege-Overlay (CyclOSM) - eingefärbte Rad-Infrastruktur auf Basis
+        // von OpenStreetMap-Daten, gedacht als Overlay über einer Basiskarte.
+        const cyclingLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+            attribution: '© CyclOSM, © OpenStreetMap contributors',
+            maxZoom: 20,
+            subdomains: 'abc'
+        });
+        
         // Hinweis: OpenRailwayMap liefert NUR die Bahninfrastruktur auf
         // transparentem Hintergrund - keine Straßen, Gebäude o.ä. Es ist als
         // Overlay über einer Basiskarte gedacht, nicht als eigene Basiskarte.
@@ -260,17 +437,35 @@
         };
         let currentRailwayLayer = null; // aktuell kein Overlay aktiv ("Aus")
         
+        // Kataster (Flurstücke) - LGL Baden-Württemberg, INSPIRE-WMS, Open Data.
+        // Layername und EPSG:3857-Unterstützung per GetCapabilities verifiziert.
+        const katasterYear = new Date().getFullYear();
+        const katasterLayer = L.tileLayer.wms('https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_INSP_BW_Flst_ALKIS?', {
+            layers: 'alkis:CP.CadastralParcel',
+            format: 'image/png',
+            transparent: true,
+            version: '1.3.0',
+            attribution: `LGL-BW (${katasterYear}) Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de`,
+            maxZoom: 19
+        });
+        
         // Standard-Basiskarte hinzufügen
         osmLayer.addTo(map);
         let currentBaseLayer = osmLayer;
         
-        // Basiskarten-Steuerung (OSM / Topo - gegenseitig exklusiv)
+        // Basiskarten-Steuerung (OSM / Topo / Satellit - gegenseitig exklusiv)
         document.querySelectorAll('input[name="baseLayer"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
                 map.removeLayer(currentBaseLayer);
-                currentBaseLayer = (e.target.value === 'topo') ? topoLayer : osmLayer;
+                currentBaseLayer = baseLayers[e.target.value] || osmLayer;
                 currentBaseLayer.addTo(map);
-                // Railway-Overlay ggf. wieder über die neue Basiskarte legen
+                // Overlays ggf. wieder über die neue Basiskarte legen
+                if (map.hasLayer(cyclingLayer)) {
+                    cyclingLayer.bringToFront();
+                }
+                if (map.hasLayer(katasterLayer)) {
+                    katasterLayer.bringToFront();
+                }
                 if (currentRailwayLayer) {
                     currentRailwayLayer.bringToFront();
                 }
@@ -290,6 +485,29 @@
                     currentRailwayLayer.addTo(map);
                 }
             });
+        });
+        
+        // Kataster-Overlay-Steuerung (unabhängig zu- und abschaltbar)
+        document.getElementById('katasterToggle').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                katasterLayer.addTo(map);
+                katasterLayer.bringToFront();
+                if (currentRailwayLayer) currentRailwayLayer.bringToFront();
+            } else {
+                map.removeLayer(katasterLayer);
+            }
+        });
+        
+        // Radwege-Overlay-Steuerung (unabhängig zu- und abschaltbar)
+        document.getElementById('cyclingToggle').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                cyclingLayer.addTo(map);
+                cyclingLayer.bringToFront();
+                if (map.hasLayer(katasterLayer)) katasterLayer.bringToFront();
+                if (currentRailwayLayer) currentRailwayLayer.bringToFront();
+            } else {
+                map.removeLayer(cyclingLayer);
+            }
         });
         
         // Marker für Nullpunkt
@@ -435,6 +653,70 @@
             return (α1 * 180 / Math.PI + 360) % 360;
         }
         
+        // Funktion: Vincenty-Formel "direct" - Zielpunkt aus Startpunkt, Peilung
+        // und Distanz. Gegenstück zu vincentyDistance/vincentyBearing oben (die
+        // beiden zusammen bilden das "inverse" Problem: Distanz+Peilung aus 2 Punkten).
+        function vincentyDirect(lat1, lon1, bearingDeg, distance) {
+            const φ1 = lat1 * Math.PI / 180;
+            const λ1 = lon1 * Math.PI / 180;
+            const α1 = bearingDeg * Math.PI / 180;
+            
+            const a = WGS84.a;
+            const b = WGS84.b;
+            const f = WGS84.f;
+            
+            const sinα1 = Math.sin(α1);
+            const cosα1 = Math.cos(α1);
+            
+            const tanU1 = (1 - f) * Math.tan(φ1);
+            const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+            const sinU1 = tanU1 * cosU1;
+            
+            const σ1 = Math.atan2(tanU1, cosα1);
+            const sinα = cosU1 * sinα1;
+            const cosSqα = 1 - sinα * sinα;
+            const uSq = cosSqα * (a * a - b * b) / (b * b);
+            const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+            const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+            
+            let σ = distance / (b * A);
+            let σPrev;
+            let iterationLimit = 100;
+            let cos2σM, sinσ, cosσ;
+            
+            do {
+                cos2σM = Math.cos(2 * σ1 + σ);
+                sinσ = Math.sin(σ);
+                cosσ = Math.cos(σ);
+                const Δσ = B * sinσ * (cos2σM + B / 4 * (cosσ * (-1 + 2 * cos2σM * cos2σM) -
+                           B / 6 * cos2σM * (-3 + 4 * sinσ * sinσ) * (-3 + 4 * cos2σM * cos2σM)));
+                σPrev = σ;
+                σ = distance / (b * A) + Δσ;
+            } while (Math.abs(σ - σPrev) > 1e-12 && --iterationLimit > 0);
+            
+            if (iterationLimit === 0) return null;
+            
+            const tmp = sinU1 * sinσ - cosU1 * cosσ * cosα1;
+            const φ2 = Math.atan2(
+                sinU1 * cosσ + cosU1 * sinσ * cosα1,
+                (1 - f) * Math.sqrt(sinα * sinα + tmp * tmp)
+            );
+            const λ = Math.atan2(
+                sinσ * sinα1,
+                cosU1 * cosσ - sinU1 * sinσ * cosα1
+            );
+            const C = f / 16 * cosSqα * (4 + f * (4 - 3 * cosSqα));
+            const Lrad = λ - (1 - C) * f * sinα *
+                (σ + C * sinσ * (cos2σM + C * cosσ * (-1 + 2 * cos2σM * cos2σM)));
+            
+            const λ2 = ((λ1 + Lrad + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+            
+            return {
+                lat: φ2 * 180 / Math.PI,
+                lon: λ2 * 180 / Math.PI
+            };
+        }
+        
         // Funktion: Höhe von Open-Elevation API abrufen
         async function getElevation(lat, lon) {
             try {
@@ -505,11 +787,29 @@
             };
         }
         
-        // Karten-Klick Event
-        map.on('click', async function(e) {
-            const lat = e.latlng.lat;
-            const lon = e.latlng.lng;
+        // Funktion: Umkehrung von convertToMinecraft - aus Minecraft X/Z die
+        // echten Koordinaten (lat/lon) berechnen, per Vincenty "direct".
+        function minecraftToLatLon(mcX, mcZ) {
+            const distance = Math.sqrt(mcX * mcX + mcZ * mcZ);
             
+            if (distance === 0) {
+                return { lat: ORIGIN_LAT, lon: ORIGIN_LON };
+            }
+            
+            // Winkel zurückrechnen: Umkehrung von x = d*sin(angle), z = -d*cos(angle)
+            const angleRad = Math.atan2(mcX, -mcZ);
+            const adjustedBearing = (angleRad * 180 / Math.PI + 360) % 360;
+            
+            // 4°-Rotation rückgängig machen
+            const bearing = (adjustedBearing + ROTATION_ANGLE + 360) % 360;
+            
+            return vincentyDirect(ORIGIN_LAT, ORIGIN_LON, bearing, distance);
+        }
+        
+        // Gemeinsame Funktion für Kartenklick, Reverse-Lookup und Adresssuche:
+        // setzt den Marker, berechnet die Minecraft-Koordinaten und aktualisiert
+        // das Info-Panel.
+        async function revealLocation(lat, lon) {
             // Alten Marker entfernen
             if (currentMarker) {
                 map.removeLayer(currentMarker);
@@ -546,6 +846,9 @@
             // Minecraft-Koordinaten berechnen
             const mc = await convertToMinecraft(lat, lon);
             
+            // Permalink mit der neuen Markerposition aktualisieren
+            updatePermalink({ lat: lat, lng: lon });
+            
             // Fehlerbehandlung falls Vincenty fehlschlägt
             if (mc.error) {
                 infoPanel.innerHTML = `
@@ -555,7 +858,7 @@
                         Bitte versuche einen anderen Punkt.
                     </div>
                 `;
-                return;
+                return mc;
             }
             
             // Info-Panel aktualisieren
@@ -621,7 +924,126 @@
                     });
                 });
             }
+            
+            return mc;
+        }
+        
+        // Karten-Klick Event
+        map.on('click', async function(e) {
+            await revealLocation(e.latlng.lat, e.latlng.lng);
         });
+        
+        // Reverse-Lookup: Minecraft-Koordinate (X/Z) eingeben -> Punkt auf der Karte
+        document.getElementById('mcGotoBtn').addEventListener('click', async () => {
+            const statusEl = document.getElementById('searchStatus');
+            const x = parseFloat(document.getElementById('mcXInput').value);
+            const z = parseFloat(document.getElementById('mcZInput').value);
+            
+            if (isNaN(x) || isNaN(z)) {
+                statusEl.textContent = '❌ Bitte X und Z eingeben.';
+                statusEl.className = 'search-status search-error';
+                return;
+            }
+            
+            const latlon = minecraftToLatLon(x, z);
+            if (!latlon) {
+                statusEl.textContent = '❌ Berechnung fehlgeschlagen.';
+                statusEl.className = 'search-status search-error';
+                return;
+            }
+            
+            map.setView([latlon.lat, latlon.lon], 18);
+            await revealLocation(latlon.lat, latlon.lon);
+            statusEl.textContent = '✓ Position gefunden.';
+            statusEl.className = 'search-status';
+        });
+        
+        ['mcXInput', 'mcZInput'].forEach(id => {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('mcGotoBtn').click();
+            });
+        });
+        
+        // Adresssuche über Nominatim (OpenStreetMap) - für gelegentliche, manuelle
+        // Suchen gedacht, kein automatisiertes Bulk-Geocoding (siehe Nominatim
+        // Nutzungsrichtlinien: nominatim.org/release-docs/latest/api/Search/).
+        async function searchAddress(query) {
+            const statusEl = document.getElementById('searchStatus');
+            statusEl.textContent = 'Suche läuft...';
+            statusEl.className = 'search-status';
+            
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+                const response = await fetch(url);
+                const results = await response.json();
+                
+                if (!results || results.length === 0) {
+                    statusEl.textContent = '❌ Nichts gefunden.';
+                    statusEl.className = 'search-status search-error';
+                    return;
+                }
+                
+                const lat = parseFloat(results[0].lat);
+                const lon = parseFloat(results[0].lon);
+                map.setView([lat, lon], 18);
+                await revealLocation(lat, lon);
+                statusEl.textContent = `✓ ${results[0].display_name}`;
+                statusEl.className = 'search-status';
+            } catch (error) {
+                console.error('Fehler bei der Adresssuche:', error);
+                statusEl.textContent = '❌ Fehler bei der Suche.';
+                statusEl.className = 'search-status search-error';
+            }
+        }
+        
+        document.getElementById('addressGotoBtn').addEventListener('click', () => {
+            const query = document.getElementById('addressInput').value.trim();
+            if (query) searchAddress(query);
+        });
+        
+        document.getElementById('addressInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('addressGotoBtn').click();
+        });
+        
+        // Permalink: aktuelle Kartenansicht (und ggf. Marker) in der URL kodieren,
+        // damit sich eine Ansicht per Link teilen lässt. Format: #zoom/lat/lon
+        // bzw. #zoom/lat/lon/m/markerLat/markerLon, wenn ein Marker gesetzt ist.
+        function updatePermalink(markerLatLon) {
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            let hash = `#${zoom}/${center.lat.toFixed(6)}/${center.lng.toFixed(6)}`;
+            if (markerLatLon) {
+                hash += `/m/${markerLatLon.lat.toFixed(6)}/${markerLatLon.lng.toFixed(6)}`;
+            }
+            history.replaceState(null, '', hash);
+        }
+        
+        map.on('moveend zoomend', () => {
+            updatePermalink(currentMarker ? currentMarker.getLatLng() : null);
+        });
+        
+        // Beim Laden: Ansicht (und ggf. Marker) aus der URL übernehmen, falls vorhanden
+        (function loadFromPermalink() {
+            const hash = window.location.hash.replace('#', '');
+            if (!hash) return;
+            
+            const parts = hash.split('/');
+            const zoom = parseFloat(parts[0]);
+            const lat = parseFloat(parts[1]);
+            const lon = parseFloat(parts[2]);
+            
+            if (!isNaN(zoom) && !isNaN(lat) && !isNaN(lon)) {
+                map.setView([lat, lon], zoom);
+            }
+            
+            if (parts[3] === 'm' && parts.length >= 6) {
+                const markerLat = parseFloat(parts[4]);
+                const markerLon = parseFloat(parts[5]);
+                if (!isNaN(markerLat) && !isNaN(markerLon)) {
+                    revealLocation(markerLat, markerLon);
+                }
+            }
+        })();
     </script>
 </body>
 </html>
