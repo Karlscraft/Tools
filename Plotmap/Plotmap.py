@@ -16,6 +16,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import sys
 import urllib.parse
 from copy import deepcopy
 from dataclasses import dataclass
@@ -29,6 +30,11 @@ SEITENTITEL = "Karlscraft – Plotkarte"
 WORTMARKE = "Karlscraft"
 UNTERTITEL = "Liegenschaftskarte"
 URSPRUNG_LABEL = "Pyramide  0 | 0"
+
+# Wappen wird direkt aus dem Tools-Repository geladen. Damit bleibt die
+# HTML-Datei klein und ein ausgetauschtes Logo wirkt sofort auf allen Karten.
+WAPPEN_URL = ("https://raw.githubusercontent.com/Karlscraft/Tools/"
+              "refs/heads/main/Karlscraft%20Logo.png")
 PREIS_PRO_BLOCK = 256  # € je m²
 
 KOPFZEILEN_LINKS: List[Tuple[str, str]] = [
@@ -230,7 +236,7 @@ def rename_plots_sequential(json_data: dict) -> dict:
         if old_name.startswith('_PLOT_'):
             new_name = f'_PLOT_{next_number}'
             area['name'] = new_name
-            print(f"  Umbenannt: {old_name} → {new_name}")
+            print(f"  Umbenannt: {old_name} -> {new_name}")
             next_number += 1
 
     return json_data
@@ -488,17 +494,15 @@ def build_logo_markup(logo_path: Optional[str] = None,
     """
     Liefert (HTML-Markup für das Wappen, Favicon-URL).
 
-    --logo      bettet die Bilddatei Base64-kodiert ein: die Karte bleibt eine
-                einzelne, eigenständige Datei, wird dafür aber deutlich größer.
-    --logo-url  verweist auf eine bereits im Web liegende Datei: die HTML-Datei
-                bleibt klein (empfehlenswert, wenn die Karte bei jedem
-                Serverstopp neu erzeugt und nach GitHub geschoben wird).
-    Ohne beides wird das eingebaute SVG-Wappen genutzt (rund 1,5 KB).
-    """
-    if logo_url:
-        markup = f'<img class="kc-wappen" src="{logo_url}" alt="Karlscraft-Wappen">'
-        return markup, logo_url
+    Reihenfolge: --logo schlägt --logo-url, --logo-url schlägt das SVG-Wappen.
 
+    --logo      bettet eine lokale Bilddatei Base64-kodiert ein: die Karte
+                bleibt eine einzelne, eigenständige Datei, wird dafür aber
+                deutlich größer (bei jedem Serverstopp ein neuer Blob in Git).
+    --logo-url  verweist auf das Wappen im Netz. Standard ist WAPPEN_URL, die
+                HTML-Datei bleibt damit klein. Mit --logo-url "" abschaltbar.
+    Greift keines von beidem, wird das eingebaute SVG-Wappen genutzt.
+    """
     if logo_path:
         if not os.path.exists(logo_path):
             print(f"Warnung: Logo nicht gefunden ({logo_path}) – nutze eingebautes Wappen")
@@ -509,10 +513,21 @@ def build_logo_markup(logo_path: Optional[str] = None,
             uri = f"data:{mime};base64," + base64.b64encode(rohdaten).decode('ascii')
             markup = f'<img class="kc-wappen" src="{uri}" alt="Karlscraft-Wappen">'
             print(f"  Wappen eingebettet: {logo_path} ({mime}, "
-                  f"{len(rohdaten)/1024:.0f} KB → {len(uri)/1024:.0f} KB Base64)")
+                  f"{len(rohdaten)/1024:.0f} KB -> {len(uri)/1024:.0f} KB Base64)")
             # Als Favicon bleibt das SVG-Wappen: es ist in 16 px schärfer
             # und spart die zweite Kopie der Bilddaten.
             return markup, _svg_favicon()
+
+    if logo_url:
+        # Laedt das Bild nicht (Repo offline, Datei umbenannt, kein Netz),
+        # springt onerror auf das eingebaute SVG-Wappen um.
+        markup = (
+            f'<img class="kc-wappen" src="{logo_url}" alt="Karlscraft-Wappen" '
+            f'onerror="this.hidden=true;'
+            f"document.getElementById('kc-wappen-ersatz').hidden=false\">"
+            f'<span class="kc-wappen" id="kc-wappen-ersatz" hidden>{WAPPEN_SVG}</span>'
+        )
+        return markup, _svg_favicon()
 
     return f'<span class="kc-wappen">{WAPPEN_SVG}</span>', _svg_favicon()
 
@@ -580,6 +595,7 @@ body{
 }
 .kc-wappen{display:block;height:44px;width:auto;flex:0 0 auto;
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.55))}
+.kc-wappen[hidden]{display:none}
 .kc-wappen svg{height:44px;width:auto;display:block}
 #kc-titel{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 #kc-titel .wortmarke{
@@ -1270,10 +1286,37 @@ def generate_html_map(plots: List[Plot],
 
 
 # ---------------------------------------------------------------------------
+# Konsolenausgabe
+# ---------------------------------------------------------------------------
+
+def konsole_vorbereiten() -> None:
+    """
+    Macht die Konsolenausgabe gegen Kodierungsfehler unempfindlich.
+
+    Wird die Ausgabe umgeleitet (z. B. `python Plotmap.py ... 2>&1 | Tee-Object`),
+    schreibt Python unter Windows nicht in der Konsolen-Codepage, sondern in
+    cp1252. Zeichen ausserhalb dieses Zeichensatzes brechen den Lauf dann mit
+    einem UnicodeEncodeError ab - mitten in der Kartenerzeugung.
+
+    errors="replace" ersetzt solche Zeichen durch "?", statt abzubrechen.
+    Die Kodierung selbst bleibt unangetastet, damit Umlaute im PowerShell-Log
+    weiterhin richtig ankommen. line_buffering sorgt dafuer, dass der Fortschritt
+    auch in einer Pipe sofort sichtbar wird und nicht blockweise nachrueckt.
+    """
+    for strom in (sys.stdout, sys.stderr):
+        try:
+            strom.reconfigure(errors="replace", line_buffering=True)
+        except (AttributeError, ValueError, OSError):
+            pass  # z. B. bereits geschlossen oder kein TextIOWrapper
+
+
+# ---------------------------------------------------------------------------
 # Einstiegspunkt
 # ---------------------------------------------------------------------------
 
 def main():
+    konsole_vorbereiten()
+
     parser = argparse.ArgumentParser(
         description="Erstellt die Karlscraft-Plotkarte aus der ForgeEssentials-JSON."
     )
@@ -1283,9 +1326,9 @@ def main():
     parser.add_argument("--logo", default=None,
                         help="Pfad zum Karlscraft-Wappen (PNG/JPG/SVG). "
                              "Wird Base64-kodiert in die HTML-Datei eingebettet.")
-    parser.add_argument("--logo-url", default=None,
-                        help="URL des Wappens, statt es einzubetten "
-                             "(hält die HTML-Datei klein).")
+    parser.add_argument("--logo-url", default=WAPPEN_URL,
+                        help="URL des Wappens (Standard: Tools-Repository). "
+                             'Mit --logo-url "" wird das eingebaute SVG-Wappen genutzt.')
     parser.add_argument("--merge-liste", default="grundstücke.txt",
                         help="Datei mit den zusammenzuführenden Plot-IDs")
     args = parser.parse_args()
@@ -1316,7 +1359,7 @@ def main():
 
     print("\n=== Plots extrahieren ===")
     plots = parse_plots(data)
-    print(f"  → {len(plots)} Plots gefunden")
+    print(f"  -> {len(plots)} Plots gefunden")
 
     print("\n=== HTML-Karte generieren ===")
     generate_html_map(plots, args.output, args.logo, args.logo_url)
