@@ -1,5 +1,11 @@
 # Tools
 
+## ✔️ Verifizierung
+
+### [Verifizierung](https://karlscraft.github.io/Tools/Verifizierung/Verifizierung.html)
+* Voraussetzung zum Spielen auf dem Karlscraft-Server.
+* Nur verfügbar, wenn der Server online ist.
+
 ## 🗺 Kartographie
 
 ### [Plotkarte](https://karlscraft.github.io/Tools/Plotmap/Plotmap.html)
