@@ -52,8 +52,8 @@ body{
 }
 .kc-wappen{display:block;height:44px;width:auto;flex:0 0 auto;
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.55))}
-.kc-wappen[hidden]{display:none}
 .kc-wappen svg{height:44px;width:auto;display:block}
+.kc-wappen[hidden]{display:none}
 #kc-titel{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 #kc-titel .wortmarke{
   font-family:var(--serif);font-size:23px;font-weight:700;letter-spacing:.05em;
@@ -109,6 +109,25 @@ select{
 select:hover{border-color:var(--balken)}
 option{background:#1c1513;color:var(--text)}
 
+/* Schalter fuer den Stadtplan */
+.schalter{display:flex;align-items:center;gap:9px;margin-top:12px;padding:8px 9px;
+  border:1px solid rgba(201,162,39,.35);border-radius:2px;cursor:pointer;
+  font-size:13px;transition:background .15s,border-color .15s}
+.schalter:hover{background:rgba(242,194,48,.08);border-color:rgba(242,194,48,.6)}
+.schalter input{accent-color:var(--balken);width:15px;height:15px;cursor:pointer;flex:0 0 auto}
+.schalter.gesperrt{opacity:.42;cursor:not-allowed}
+.schalter.gesperrt:hover{background:none;border-color:rgba(201,162,39,.35)}
+.schalter .hinweis{display:block;font-size:10px;color:var(--text-leise);margin-top:2px}
+
+/* Kartennachweis - bei aktivem Stadtplan Pflicht */
+#kc-nachweis{position:absolute;z-index:20;left:50%;transform:translateX(-50%);
+  bottom:14px;display:none;padding:5px 11px;font-size:10.5px;letter-spacing:.02em;
+  color:var(--text-leise);background:rgba(20,16,15,.85);
+  border:1px solid rgba(201,162,39,.32);border-radius:2px;white-space:nowrap}
+#kc-nachweis.an{display:block}
+#kc-nachweis a{color:var(--gold-hell);text-decoration:none}
+#kc-nachweis a:hover{text-decoration:underline}
+
 .knopfreihe{display:flex;gap:6px;margin-top:12px}
 button.knopf{
   flex:1;padding:8px 0;font-family:var(--sans);font-size:13px;font-weight:600;
@@ -126,8 +145,16 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
   border:1px solid rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(242,194,48,.3)}
 .eintrag .wer{flex:1;min-width:0;font-size:13px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
+.eintrag .amt{flex:0 0 auto;font-size:9px;font-weight:700;letter-spacing:.1em;
+  padding:1px 4px;border:1px solid currentColor;border-radius:2px}
 .eintrag .zahl{font-size:11px;color:var(--text-leise);font-variant-numeric:tabular-nums}
 .leer{padding:14px 10px;font-size:13px;color:var(--text-leise);line-height:1.5}
+
+#amt-legende{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px 14px;padding:9px 13px;
+  border-top:1px solid rgba(201,162,39,.28);font-size:11px;color:var(--text-leise)}
+#amt-legende:empty{display:none}
+#amt-legende i{display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:6px;vertical-align:0}
 
 /* Bilanz */
 .zeile{display:flex;justify-content:space-between;gap:18px;font-size:13px;padding:3px 0}
@@ -162,6 +189,9 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
 #kc-auszug dt{color:#6B5B48;letter-spacing:.03em;white-space:nowrap}
 #kc-auszug dd{text-align:right;font-variant-numeric:tabular-nums;word-break:break-word}
 #kc-auszug dd.preis{font-family:var(--serif);font-weight:700;font-size:14px;color:var(--rot-tief)}
+#kc-auszug .siegel{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:2px;
+  font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  vertical-align:1px;box-shadow:0 1px 2px rgba(0,0,0,.3)}
 
 /* ---------------- Mobil ---------------- */
 @media (max-width:760px){
@@ -206,6 +236,12 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
         <button class="knopf" id="rein" title="Hineinzoomen" aria-label="Hineinzoomen">+</button>
         <button class="knopf breit" id="alles">Alles zeigen</button>
       </div>
+      <label class="schalter" id="osm-schalter">
+        <input type="checkbox" id="osm">
+        <span>Stadtplan hinterlegen
+          <span class="hinweis" id="osm-hinweis">OpenStreetMap</span>
+        </span>
+      </label>
       <div class="knopfreihe">
         <button class="knopf breit" id="legende-schalter" aria-controls="kc-legende" aria-expanded="true">Eigentümer ausblenden</button>
       </div>
@@ -215,6 +251,7 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
   <section class="tafel" id="kc-legende">
     <h2>Eigentümer <span id="anzahl-eigentuemer"></span></h2>
     <div class="inhalt" id="legende-liste"></div>
+    <div id="amt-legende"></div>
   </section>
 
   <section class="tafel" id="kc-bilanz">
@@ -233,15 +270,21 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
     <div class="beschriftung" id="massstab-text">–</div>
   </div>
 
+  <div id="kc-nachweis"></div>
   <div id="kc-auszug"></div>
 </main>
 
 <script>
 "use strict";
 
-const plotsData      = {};
+const plotsData      = {"0": [{"id": 1, "name": "Zirkel 1", "owner": "Turmspitze", "x_min": -260, "z_min": -110, "x_max": -229, "z_max": -69, "area": 1344, "price": 344064, "color": "#82be46", "amt": null}, {"id": 2, "name": "Zirkel 2", "owner": "Grotzingen", "x_min": -228, "z_min": -110, "x_max": -209, "z_max": -69, "area": 840, "price": 215040, "color": "#4c9bd6", "amt": null}, {"id": 3, "name": "Zirkel 4", "owner": "Hans_im_Glueck", "x_min": -208, "z_min": -110, "x_max": -178, "z_max": -69, "area": 1302, "price": 333312, "color": "#3acb3c", "amt": null}, {"id": 4, "name": "Zirkel 6", "owner": "Hans_im_Glueck", "x_min": -177, "z_min": -110, "x_max": -148, "z_max": -69, "area": 1260, "price": 322560, "color": "#3acb3c", "amt": null}, {"id": 5, "name": "Zirkel 7", "owner": "Lisa_Klein", "x_min": -147, "z_min": -110, "x_max": -121, "z_max": -69, "area": 1134, "price": 290304, "color": "#35cad0", "amt": null}, {"id": 6, "name": "Zirkel 8", "owner": "Lisa_Klein", "x_min": -120, "z_min": -110, "x_max": -105, "z_max": -69, "area": 672, "price": 172032, "color": "#35cad0", "amt": null}, {"id": 7, "name": "Zirkel 9", "owner": "Alb_Anrainer", "x_min": -104, "z_min": -110, "x_max": -82, "z_max": -69, "area": 966, "price": 247296, "color": "#607fcd", "amt": null}, {"id": 8, "name": "Zirkel 11", "owner": "Alb_Anrainer", "x_min": -81, "z_min": -110, "x_max": -64, "z_max": -69, "area": 756, "price": 193536, "color": "#607fcd", "amt": null}, {"id": 9, "name": "Zirkel 13", "owner": "Alb_Anrainer", "x_min": -63, "z_min": -110, "x_max": -51, "z_max": -69, "area": 546, "price": 139776, "color": "#607fcd", "amt": null}, {"id": 10, "name": "Erbprinzenstraße 2", "owner": "Wolfartsweier", "x_min": -30, "z_min": -110, "x_max": -6, "z_max": -69, "area": 1050, "price": 268800, "color": "#c238b6", "amt": null}, {"id": 11, "name": "Erbprinzenstraße 4", "owner": "Wolfartsweier", "x_min": -5, "z_min": -110, "x_max": 28, "z_max": -69, "area": 1428, "price": 365568, "color": "#c238b6", "amt": null}, {"id": 12, "name": "Erbprinzenstraße 5", "owner": "Marie_KA", "x_min": 29, "z_min": -110, "x_max": 51, "z_max": -69, "area": 966, "price": 247296, "color": "#a34dd5", "amt": null}, {"id": 13, "name": "Erbprinzenstraße 7", "owner": "NordstadtNils", "x_min": 52, "z_min": -110, "x_max": 67, "z_max": -69, "area": 672, "price": 172032, "color": "#ca6858", "amt": null}, {"id": 14, "name": "Erbprinzenstraße 9", "owner": "Faecherbauer", "x_min": 68, "z_min": -110, "x_max": 94, "z_max": -69, "area": 1134, "price": 290304, "color": "#59cf78", "amt": "moderator"}, {"id": 15, "name": "Erbprinzenstraße 11", "owner": "Faecherbauer", "x_min": 95, "z_min": -110, "x_max": 117, "z_max": -69, "area": 966, "price": 247296, "color": "#59cf78", "amt": "moderator"}, {"id": 16, "name": "Erbprinzenstraße 13", "owner": "Timo_Ziegel", "x_min": 118, "z_min": -110, "x_max": 137, "z_max": -69, "area": 840, "price": 215040, "color": "#c98c64", "amt": null}, {"id": 17, "name": "Erbprinzenstraße 14", "owner": "Albtalbahn", "x_min": 138, "z_min": -110, "x_max": 159, "z_max": -69, "area": 924, "price": 236544, "color": "#91d747", "amt": null}, {"id": 18, "name": "Akademiestraße 2", "owner": "Albtalbahn", "x_min": 180, "z_min": -110, "x_max": 201, "z_max": -69, "area": 924, "price": 236544, "color": "#91d747", "amt": null}, {"id": 19, "name": "Akademiestraße 4", "owner": "Anna_Baut", "x_min": 202, "z_min": -110, "x_max": 224, "z_max": -69, "area": 966, "price": 247296, "color": "#63c573", "amt": null}, {"id": 20, "name": "Akademiestraße 6", "owner": "Felix_KA", "x_min": 225, "z_min": -110, "x_max": 249, "z_max": -69, "area": 1050, "price": 268800, "color": "#34cb94", "amt": null}, {"id": 21, "name": "Akademiestraße 7", "owner": "Schlossgeist", "x_min": 250, "z_min": -110, "x_max": 280, "z_max": -69, "area": 1302, "price": 333312, "color": "#d63db2", "amt": null}, {"id": 22, "name": "Akademiestraße 9", "owner": "Hagsfelder", "x_min": 281, "z_min": -110, "x_max": 300, "z_max": -69, "area": 840, "price": 215040, "color": "#bd5547", "amt": null}, {"id": 23, "name": "Akademiestraße 11", "owner": "Malschbach", "x_min": 301, "z_min": -110, "x_max": 329, "z_max": -69, "area": 1218, "price": 311808, "color": "#41c899", "amt": null}, {"id": 24, "name": "Kaiserstraße 1", "owner": "Ida_Fenster", "x_min": -260, "z_min": -55, "x_max": -240, "z_max": -18, "area": 798, "price": 204288, "color": "#8d2cce", "amt": null}, {"id": 25, "name": "Kaiserstraße 3", "owner": "Muehlburger", "x_min": -239, "z_min": -55, "x_max": -212, "z_max": -18, "area": 1064, "price": 272384, "color": "#57bc38", "amt": null}, {"id": 26, "name": "Kaiserstraße 5", "owner": "Muehlburger", "x_min": -211, "z_min": -55, "x_max": -181, "z_max": -18, "area": 1178, "price": 301568, "color": "#57bc38", "amt": null}, {"id": 27, "name": "Kaiserstraße 6", "owner": "Ben_Dachdecker", "x_min": -180, "z_min": -55, "x_max": -164, "z_max": -18, "area": 646, "price": 165376, "color": "#47b1d1", "amt": null}, {"id": 28, "name": "Kaiserstraße 8", "owner": "Grotzingen", "x_min": -163, "z_min": -55, "x_max": -136, "z_max": -18, "area": 1064, "price": 272384, "color": "#4c9bd6", "amt": null}, {"id": 29, "name": "Kaiserstraße 10", "owner": "Durlacher", "x_min": -135, "z_min": -55, "x_max": -111, "z_max": -18, "area": 950, "price": 243200, "color": "#d04976", "amt": null}, {"id": 30, "name": "Kaiserstraße 11", "owner": "Durlacher", "x_min": -110, "z_min": -55, "x_max": -81, "z_max": -18, "area": 1140, "price": 291840, "color": "#d04976", "amt": null}, {"id": 31, "name": "Kaiserstraße 13", "owner": "NordstadtNils", "x_min": -80, "z_min": -55, "x_max": -53, "z_max": -18, "area": 1064, "price": 272384, "color": "#ca6858", "amt": null}, {"id": 32, "name": "Kaiserstraße 15", "owner": "NordstadtNils", "x_min": -30, "z_min": -55, "x_max": -9, "z_max": -18, "area": 836, "price": 214016, "color": "#ca6858", "amt": null}, {"id": 33, "name": "Kaiserstraße 16", "owner": "Badenser42", "x_min": -8, "z_min": -55, "x_max": 17, "z_max": -18, "area": 988, "price": 252928, "color": "#bf4075", "amt": "operator"}, {"id": 34, "name": "Kaiserstraße 17", "owner": "Badenser42", "x_min": 18, "z_min": -55, "x_max": 42, "z_max": -18, "area": 950, "price": 243200, "color": "#bf4075", "amt": "operator"}, {"id": 35, "name": "Kaiserstraße 19", "owner": "Nora_Baut", "x_min": 43, "z_min": -55, "x_max": 62, "z_max": -18, "area": 760, "price": 194560, "color": "#ca6f53", "amt": null}, {"id": 36, "name": "Kaiserstraße 20", "owner": "Rheinkiesel", "x_min": 63, "z_min": -55, "x_max": 79, "z_max": -18, "area": 646, "price": 165376, "color": "#92c662", "amt": null}, {"id": 37, "name": "Kaiserstraße 21", "owner": "Rheinkiesel", "x_min": 80, "z_min": -55, "x_max": 103, "z_max": -18, "area": 912, "price": 233472, "color": "#92c662", "amt": null}, {"id": 38, "name": "Kaiserstraße 23", "owner": "Karlsruher_Kind", "x_min": 104, "z_min": -55, "x_max": 122, "z_max": -18, "area": 722, "price": 184832, "color": "#2daec8", "amt": null}, {"id": 39, "name": "Kaiserstraße 25", "owner": "Faecherbauer", "x_min": 123, "z_min": -55, "x_max": 154, "z_max": -18, "area": 1216, "price": 311296, "color": "#59cf78", "amt": "moderator"}, {"id": 40, "name": "Kaiserstraße 26", "owner": "Faecherbauer", "x_min": 180, "z_min": -55, "x_max": 198, "z_max": -18, "area": 722, "price": 184832, "color": "#59cf78", "amt": "moderator"}, {"id": 41, "name": "Kaiserstraße 27", "owner": "Pyramidenwacht", "x_min": 199, "z_min": -55, "x_max": 229, "z_max": -18, "area": 1178, "price": 301568, "color": "#c24787", "amt": "moderator"}, {"id": 42, "name": "Kaiserstraße 28", "owner": "Pyramidenwacht", "x_min": 230, "z_min": -55, "x_max": 257, "z_max": -18, "area": 1064, "price": 272384, "color": "#c24787", "amt": "moderator"}, {"id": 43, "name": "Kaiserstraße 30", "owner": "Alb_Anrainer", "x_min": 258, "z_min": -55, "x_max": 278, "z_max": -18, "area": 798, "price": 204288, "color": "#607fcd", "amt": null}, {"id": 44, "name": "Kaiserstraße 32", "owner": "Alb_Anrainer", "x_min": 279, "z_min": -55, "x_max": 299, "z_max": -18, "area": 798, "price": 204288, "color": "#607fcd", "amt": null}, {"id": 45, "name": "Kaiserstraße 33", "owner": "Alb_Anrainer", "x_min": 300, "z_min": -55, "x_max": 322, "z_max": -18, "area": 874, "price": 223744, "color": "#607fcd", "amt": null}, {"id": 46, "name": "Kaiserstraße 35", "owner": "Mira_Bau", "x_min": 323, "z_min": -55, "x_max": 339, "z_max": -18, "area": 646, "price": 165376, "color": "#c94a8c", "amt": null}, {"id": 47, "name": "Herrenstraße 1", "owner": "Mira_Bau", "x_min": -260, "z_min": 25, "x_max": -232, "z_max": 69, "area": 1305, "price": 334080, "color": "#c94a8c", "amt": null}, {"id": 48, "name": "Herrenstraße 2", "owner": "Kurbeltier", "x_min": -231, "z_min": 25, "x_max": -201, "z_max": 69, "area": 1395, "price": 357120, "color": "#69cf59", "amt": "moderator"}, {"id": 49, "name": "Herrenstraße 3", "owner": "Kurbeltier", "x_min": -200, "z_min": 25, "x_max": -174, "z_max": 69, "area": 1215, "price": 311040, "color": "#69cf59", "amt": "moderator"}, {"id": 50, "name": "Herrenstraße 5", "owner": "Kurbeltier", "x_min": -173, "z_min": 25, "x_max": -156, "z_max": 69, "area": 810, "price": 207360, "color": "#69cf59", "amt": "moderator"}, {"id": 51, "name": "Herrenstraße 6", "owner": "Fritz_Baumeister", "x_min": -155, "z_min": 25, "x_max": -137, "z_max": 69, "area": 855, "price": 218880, "color": "#4489bb", "amt": null}, {"id": 52, "name": "Herrenstraße 7", "owner": "Karlsruher_Kind", "x_min": -136, "z_min": 25, "x_max": -109, "z_max": 69, "area": 1260, "price": 322560, "color": "#2daec8", "amt": null}, {"id": 53, "name": "Herrenstraße 8", "owner": "Karlsruher_Kind", "x_min": -108, "z_min": 25, "x_max": -87, "z_max": 69, "area": 990, "price": 253440, "color": "#2daec8", "amt": null}, {"id": 54, "name": "Herrenstraße 10", "owner": "Grotzingen", "x_min": -86, "z_min": 25, "x_max": -53, "z_max": 69, "area": 1530, "price": 391680, "color": "#4c9bd6", "amt": null}, {"id": 55, "name": "Marktplatz 2", "owner": "Grotzingen", "x_min": -30, "z_min": 25, "x_max": -11, "z_max": 69, "area": 900, "price": 230400, "color": "#4c9bd6", "amt": null}, {"id": 56, "name": "Marktplatz 3", "owner": "Sarah_Turm", "x_min": -10, "z_min": 25, "x_max": 21, "z_max": 69, "area": 1440, "price": 368640, "color": "#7dd035", "amt": null}, {"id": 57, "name": "Marktplatz 4", "owner": "Jule_Mauer", "x_min": 22, "z_min": 25, "x_max": 46, "z_max": 69, "area": 1125, "price": 288000, "color": "#4bc399", "amt": null}, {"id": 58, "name": "Marktplatz 6", "owner": "Kronenplatz", "x_min": 47, "z_min": 25, "x_max": 67, "z_max": 69, "area": 945, "price": 241920, "color": "#50beb7", "amt": null}, {"id": 59, "name": "Marktplatz 7", "owner": "Alb_Anrainer", "x_min": 68, "z_min": 25, "x_max": 94, "z_max": 69, "area": 1215, "price": 311040, "color": "#607fcd", "amt": null}, {"id": 60, "name": "Marktplatz 9", "owner": "Fritz_Baumeister", "x_min": 95, "z_min": 25, "x_max": 124, "z_max": 69, "area": 1350, "price": 345600, "color": "#4489bb", "amt": null}, {"id": 61, "name": "Marktplatz 10", "owner": "Fritz_Baumeister", "x_min": 125, "z_min": 25, "x_max": 154, "z_max": 69, "area": 1350, "price": 345600, "color": "#4489bb", "amt": null}, {"id": 62, "name": "Kronenplatz 1", "owner": "MarkgrafLudwig", "x_min": 180, "z_min": 25, "x_max": 198, "z_max": 69, "area": 855, "price": 218880, "color": "#5a3ecc", "amt": null}, {"id": 63, "name": "Kronenplatz 3", "owner": "Bauhuette_KA", "x_min": 199, "z_min": 25, "x_max": 219, "z_max": 69, "area": 945, "price": 241920, "color": "#cba34d", "amt": "operator"}, {"id": 64, "name": "Kronenplatz 5", "owner": "Guenther_H", "x_min": 220, "z_min": 25, "x_max": 237, "z_max": 69, "area": 810, "price": 207360, "color": "#38c23d", "amt": null}, {"id": 65, "name": "Kronenplatz 7", "owner": "Guenther_H", "x_min": 238, "z_min": 25, "x_max": 266, "z_max": 69, "area": 1305, "price": 334080, "color": "#38c23d", "amt": null}, {"id": 66, "name": "Kronenplatz 8", "owner": "Grotzingen", "x_min": 267, "z_min": 25, "x_max": 286, "z_max": 69, "area": 900, "price": 230400, "color": "#4c9bd6", "amt": null}, {"id": 67, "name": "Kronenplatz 10", "owner": "Grotzingen", "x_min": 287, "z_min": 25, "x_max": 302, "z_max": 69, "area": 720, "price": 184320, "color": "#4c9bd6", "amt": null}, {"id": 68, "name": "Kronenplatz 12", "owner": "Grotzingen", "x_min": 303, "z_min": 25, "x_max": 320, "z_max": 69, "area": 810, "price": 207360, "color": "#4c9bd6", "amt": null}, {"id": 69, "name": "Kronenplatz 14", "owner": "Sarah_Turm", "x_min": 321, "z_min": 25, "x_max": 339, "z_max": 69, "area": 855, "price": 218880, "color": "#7dd035", "amt": null}, {"id": 70, "name": "Lammstraße 1", "owner": "Sarah_Turm", "x_min": -260, "z_min": 90, "x_max": -240, "z_max": 129, "area": 840, "price": 215040, "color": "#7dd035", "amt": null}, {"id": 71, "name": "Lammstraße 2", "owner": "Alessandro", "x_min": -239, "z_min": 90, "x_max": -212, "z_max": 129, "area": 1120, "price": 286720, "color": "#c7765c", "amt": "admin"}, {"id": 72, "name": "Lammstraße 4", "owner": "Alessandro", "x_min": -211, "z_min": 90, "x_max": -189, "z_max": 129, "area": 920, "price": 235520, "color": "#c7765c", "amt": "admin"}, {"id": 73, "name": "Lammstraße 6", "owner": "Turmspitze", "x_min": -188, "z_min": 90, "x_max": -164, "z_max": 129, "area": 1000, "price": 256000, "color": "#82be46", "amt": null}, {"id": 74, "name": "Lammstraße 7", "owner": "Albtalbahn", "x_min": -163, "z_min": 90, "x_max": -145, "z_max": 129, "area": 760, "price": 194560, "color": "#91d747", "amt": null}, {"id": 75, "name": "Lammstraße 9", "owner": "Selim_B", "x_min": -144, "z_min": 90, "x_max": -117, "z_max": 129, "area": 1120, "price": 286720, "color": "#43d04a", "amt": null}, {"id": 76, "name": "Lammstraße 10", "owner": "Selim_B", "x_min": -116, "z_min": 90, "x_max": -90, "z_max": 129, "area": 1080, "price": 276480, "color": "#43d04a", "amt": null}, {"id": 77, "name": "Lammstraße 11", "owner": "Karlsruher_Kind", "x_min": -89, "z_min": 90, "x_max": -56, "z_max": 129, "area": 1360, "price": 348160, "color": "#2daec8", "amt": null}, {"id": 78, "name": "Ludwigsplatz 2", "owner": "Bauhuette_KA", "x_min": -30, "z_min": 90, "x_max": -12, "z_max": 129, "area": 760, "price": 194560, "color": "#cba34d", "amt": "operator"}, {"id": 79, "name": "Ludwigsplatz 4", "owner": "Grotzingen", "x_min": -11, "z_min": 90, "x_max": 15, "z_max": 129, "area": 1080, "price": 276480, "color": "#4c9bd6", "amt": null}, {"id": 80, "name": "Ludwigsplatz 5", "owner": "Grotzingen", "x_min": 16, "z_min": 90, "x_max": 41, "z_max": 129, "area": 1040, "price": 266240, "color": "#4c9bd6", "amt": null}, {"id": 81, "name": "Ludwigsplatz 7", "owner": "Mystiker", "x_min": 42, "z_min": 90, "x_max": 58, "z_max": 129, "area": 680, "price": 174080, "color": "#3a97bb", "amt": "moderator"}, {"id": 82, "name": "Ludwigsplatz 8", "owner": "Leon_1899", "x_min": 59, "z_min": 90, "x_max": 88, "z_max": 129, "area": 1200, "price": 307200, "color": "#79db51", "amt": null}, {"id": 83, "name": "Ludwigsplatz 10", "owner": "Paul_Bauer", "x_min": 89, "z_min": 90, "x_max": 109, "z_max": 129, "area": 840, "price": 215040, "color": "#d84683", "amt": null}, {"id": 84, "name": "Ludwigsplatz 11", "owner": "Lorenz_M", "x_min": 110, "z_min": 90, "x_max": 128, "z_max": 129, "area": 760, "price": 194560, "color": "#5ecf54", "amt": null}, {"id": 85, "name": "Ludwigsplatz 12", "owner": "Knielinger", "x_min": 129, "z_min": 90, "x_max": 159, "z_max": 129, "area": 1240, "price": 317440, "color": "#cd475d", "amt": null}, {"id": 86, "name": "Adlerstraße 1", "owner": "Stupfericher", "x_min": 180, "z_min": 90, "x_max": 202, "z_max": 129, "area": 920, "price": 235520, "color": "#69bf3b", "amt": null}, {"id": 87, "name": "Adlerstraße 2", "owner": "Stupfericher", "x_min": 203, "z_min": 90, "x_max": 230, "z_max": 129, "area": 1120, "price": 286720, "color": "#69bf3b", "amt": null}, {"id": 88, "name": "Adlerstraße 3", "owner": "Knielinger", "x_min": 231, "z_min": 90, "x_max": 262, "z_max": 129, "area": 1280, "price": 327680, "color": "#cd475d", "amt": null}, {"id": 89, "name": "Adlerstraße 5", "owner": "Grotzingen", "x_min": 263, "z_min": 90, "x_max": 296, "z_max": 129, "area": 1360, "price": 348160, "color": "#4c9bd6", "amt": null}, {"id": 90, "name": "Adlerstraße 7", "owner": "Hardtwald", "x_min": 297, "z_min": 90, "x_max": 321, "z_max": 129, "area": 1000, "price": 256000, "color": "#33c1b6", "amt": null}, {"id": 91, "name": "Adlerstraße 9", "owner": "Weststadtfuchs", "x_min": 322, "z_min": 90, "x_max": 337, "z_max": 129, "area": 640, "price": 163840, "color": "#376fbe", "amt": null}, {"id": 92, "name": "Sophienstraße 2", "owner": "Timo_Ziegel", "x_min": -520, "z_min": -110, "x_max": -498, "z_max": -67, "area": 1012, "price": 259072, "color": "#c98c64", "amt": null}, {"id": 93, "name": "Sophienstraße 4", "owner": "Timo_Ziegel", "x_min": -497, "z_min": -110, "x_max": -465, "z_max": -67, "area": 1452, "price": 371712, "color": "#c98c64", "amt": null}, {"id": 94, "name": "Sophienstraße 6", "owner": "Weststadtfuchs", "x_min": -464, "z_min": -110, "x_max": -435, "z_max": -67, "area": 1320, "price": 337920, "color": "#376fbe", "amt": null}, {"id": 95, "name": "Sophienstraße 8", "owner": "Mystiker", "x_min": -434, "z_min": -110, "x_max": -411, "z_max": -67, "area": 1056, "price": 270336, "color": "#3a97bb", "amt": "moderator"}, {"id": 96, "name": "Sophienstraße 9", "owner": "Neureuter", "x_min": -410, "z_min": -110, "x_max": -389, "z_max": -67, "area": 968, "price": 247808, "color": "#d12ec9", "amt": null}, {"id": 97, "name": "Sophienstraße 11", "owner": "Grotzingen", "x_min": -388, "z_min": -110, "x_max": -356, "z_max": -67, "area": 1452, "price": 371712, "color": "#4c9bd6", "amt": null}, {"id": 98, "name": "Sophienstraße 12", "owner": "Tobi1899", "x_min": -355, "z_min": -110, "x_max": -323, "z_max": -67, "area": 1452, "price": 371712, "color": "#c55eb5", "amt": null}, {"id": 99, "name": "Sophienstraße 14", "owner": "Klaraaa", "x_min": -322, "z_min": -110, "x_max": -301, "z_max": -67, "area": 968, "price": 247808, "color": "#51c23d", "amt": null}, {"id": 100, "name": "Amalienstraße 2", "owner": "Neureuter", "x_min": -520, "z_min": -45, "x_max": -492, "z_max": -2, "area": 1276, "price": 326656, "color": "#d12ec9", "amt": null}, {"id": 101, "name": "Amalienstraße 4", "owner": "Paul_Bauer", "x_min": -491, "z_min": -45, "x_max": -472, "z_max": -2, "area": 880, "price": 225280, "color": "#d84683", "amt": null}, {"id": 102, "name": "Amalienstraße 6", "owner": "Muehlburger", "x_min": -471, "z_min": -45, "x_max": -439, "z_max": -2, "area": 1452, "price": 371712, "color": "#57bc38", "amt": null}, {"id": 103, "name": "Amalienstraße 8", "owner": "Neureuter", "x_min": -438, "z_min": -45, "x_max": -420, "z_max": -2, "area": 836, "price": 214016, "color": "#d12ec9", "amt": null}, {"id": 104, "name": "Amalienstraße 9", "owner": "Vogelbraeu", "x_min": -419, "z_min": -45, "x_max": -387, "z_max": -2, "area": 1452, "price": 371712, "color": "#40ce5a", "amt": null}, {"id": 105, "name": "Amalienstraße 11", "owner": "Bauhuette_KA", "x_min": -386, "z_min": -45, "x_max": -362, "z_max": -2, "area": 1100, "price": 281600, "color": "#cba34d", "amt": "operator"}, {"id": 106, "name": "Amalienstraße 12", "owner": "Bauhuette_KA", "x_min": -361, "z_min": -45, "x_max": -334, "z_max": -2, "area": 1232, "price": 315392, "color": "#cba34d", "amt": "operator"}, {"id": 107, "name": "Amalienstraße 13", "owner": "Grotzingen", "x_min": -333, "z_min": -45, "x_max": -318, "z_max": -2, "area": 704, "price": 180224, "color": "#4c9bd6", "amt": null}, {"id": 108, "name": "Amalienstraße 14", "owner": "Jule_Mauer", "x_min": -317, "z_min": -45, "x_max": -291, "z_max": -2, "area": 1188, "price": 304128, "color": "#4bc399", "amt": null}, {"id": 109, "name": "Waldstraße 2", "owner": "Jule_Mauer", "x_min": -520, "z_min": 25, "x_max": -493, "z_max": 68, "area": 1232, "price": 315392, "color": "#4bc399", "amt": null}, {"id": 110, "name": "Waldstraße 3", "owner": "Jule_Mauer", "x_min": -492, "z_min": 25, "x_max": -477, "z_max": 68, "area": 704, "price": 180224, "color": "#4bc399", "amt": null}, {"id": 111, "name": "Waldstraße 5", "owner": "Yannik42", "x_min": -476, "z_min": 25, "x_max": -461, "z_max": 68, "area": 704, "price": 180224, "color": "#bd864c", "amt": null}, {"id": 112, "name": "Waldstraße 7", "owner": "Beiertheimer", "x_min": -460, "z_min": 25, "x_max": -430, "z_max": 68, "area": 1364, "price": 349184, "color": "#3241c8", "amt": null}, {"id": 113, "name": "Waldstraße 9", "owner": "Beiertheimer", "x_min": -429, "z_min": 25, "x_max": -402, "z_max": 68, "area": 1232, "price": 315392, "color": "#3241c8", "amt": null}, {"id": 114, "name": "Waldstraße 11", "owner": "Hagsfelder", "x_min": -401, "z_min": 25, "x_max": -370, "z_max": 68, "area": 1408, "price": 360448, "color": "#bd5547", "amt": null}, {"id": 115, "name": "Waldstraße 13", "owner": "Nora_Baut", "x_min": -369, "z_min": 25, "x_max": -347, "z_max": 68, "area": 1012, "price": 259072, "color": "#ca6f53", "amt": null}, {"id": 116, "name": "Waldstraße 14", "owner": "Vogelbraeu", "x_min": -346, "z_min": 25, "x_max": -320, "z_max": 68, "area": 1188, "price": 304128, "color": "#40ce5a", "amt": null}, {"id": 117, "name": "Waldstraße 16", "owner": "Suedweststadt", "x_min": -319, "z_min": 25, "x_max": -291, "z_max": 68, "area": 1276, "price": 326656, "color": "#7e5dc6", "amt": null}, {"id": 118, "name": "Hebelstraße 2", "owner": "Grotzingen", "x_min": -520, "z_min": 95, "x_max": -499, "z_max": 134, "area": 880, "price": 225280, "color": "#4c9bd6", "amt": null}, {"id": 119, "name": "Hebelstraße 3", "owner": "Felix_KA", "x_min": -498, "z_min": 95, "x_max": -482, "z_max": 134, "area": 680, "price": 174080, "color": "#34cb94", "amt": null}, {"id": 120, "name": "Hebelstraße 5", "owner": "Beiertheimer", "x_min": -481, "z_min": 95, "x_max": -456, "z_max": 134, "area": 1040, "price": 266240, "color": "#3241c8", "amt": null}, {"id": 121, "name": "Hebelstraße 7", "owner": "Alb_Anrainer", "x_min": -455, "z_min": 95, "x_max": -436, "z_max": 134, "area": 800, "price": 204800, "color": "#607fcd", "amt": null}, {"id": 122, "name": "Hebelstraße 8", "owner": "Grotzingen", "x_min": -435, "z_min": 95, "x_max": -408, "z_max": 134, "area": 1120, "price": 286720, "color": "#4c9bd6", "amt": null}, {"id": 123, "name": "Hebelstraße 10", "owner": "Grotzingen", "x_min": -407, "z_min": 95, "x_max": -380, "z_max": 134, "area": 1120, "price": 286720, "color": "#4c9bd6", "amt": null}, {"id": 124, "name": "Hebelstraße 12", "owner": "Grotzingen", "x_min": -379, "z_min": 95, "x_max": -351, "z_max": 134, "area": 1160, "price": 296960, "color": "#4c9bd6", "amt": null}, {"id": 125, "name": "Hebelstraße 13", "owner": "Anna_Baut", "x_min": -350, "z_min": 95, "x_max": -322, "z_max": 134, "area": 1160, "price": 296960, "color": "#63c573", "amt": null}, {"id": 126, "name": "Hebelstraße 14", "owner": "Lorenz_M", "x_min": -321, "z_min": 95, "x_max": -304, "z_max": 134, "area": 720, "price": 184320, "color": "#5ecf54", "amt": null}, {"id": 127, "name": "Hebelstraße 16", "owner": "Alessandro", "x_min": -303, "z_min": 95, "x_max": -291, "z_max": 134, "area": 520, "price": 133120, "color": "#c7765c", "amt": "admin"}, {"id": 128, "name": "Stephanienstraße 2", "owner": "Neureuter", "x_min": -120, "z_min": 175, "x_max": -92, "z_max": 222, "area": 1392, "price": 356352, "color": "#d12ec9", "amt": null}, {"id": 129, "name": "Stephanienstraße 4", "owner": "Wolfartsweier", "x_min": -91, "z_min": 175, "x_max": -68, "z_max": 222, "area": 1152, "price": 294912, "color": "#c238b6", "amt": null}, {"id": 130, "name": "Stephanienstraße 5", "owner": "Wolfartsweier", "x_min": -67, "z_min": 175, "x_max": -45, "z_max": 222, "area": 1104, "price": 282624, "color": "#c238b6", "amt": null}, {"id": 131, "name": "Stephanienstraße 7", "owner": "Emma_Zwo", "x_min": -44, "z_min": 175, "x_max": -23, "z_max": 222, "area": 1056, "price": 270336, "color": "#d039c6", "amt": null}, {"id": 132, "name": "Stephanienstraße 8", "owner": "Paul_Bauer", "x_min": -22, "z_min": 175, "x_max": -7, "z_max": 222, "area": 768, "price": 196608, "color": "#d84683", "amt": null}, {"id": 133, "name": "Stephanienstraße 9", "owner": "Ida_Fenster", "x_min": -6, "z_min": 175, "x_max": 24, "z_max": 222, "area": 1488, "price": 380928, "color": "#8d2cce", "amt": null}, {"id": 134, "name": "Stephanienstraße 10", "owner": "Pfinztalbahn", "x_min": 25, "z_min": 175, "x_max": 45, "z_max": 222, "area": 1008, "price": 258048, "color": "#6dca63", "amt": null}, {"id": 135, "name": "Stephanienstraße 11", "owner": "Brunnenbauer", "x_min": 46, "z_min": 175, "x_max": 79, "z_max": 222, "area": 1632, "price": 417792, "color": "#c19c57", "amt": null}, {"id": 136, "name": "Stephanienstraße 13", "owner": "Brunnenbauer", "x_min": 80, "z_min": 175, "x_max": 105, "z_max": 222, "area": 1248, "price": 319488, "color": "#c19c57", "amt": null}, {"id": 137, "name": "Stephanienstraße 14", "owner": "Sarah_Turm", "x_min": 106, "z_min": 175, "x_max": 126, "z_max": 222, "area": 1008, "price": 258048, "color": "#7dd035", "amt": null}, {"id": 138, "name": "Stephanienstraße 15", "owner": "Grotzingen", "x_min": 127, "z_min": 175, "x_max": 139, "z_max": 222, "area": 624, "price": 159744, "color": "#4c9bd6", "amt": null}, {"id": 139, "name": "Ritterstraße 1", "owner": "Neureuter", "x_min": 170, "z_min": 175, "x_max": 202, "z_max": 222, "area": 1584, "price": 405504, "color": "#d12ec9", "amt": null}, {"id": 140, "name": "Ritterstraße 3", "owner": "Bauhuette_KA", "x_min": 203, "z_min": 175, "x_max": 231, "z_max": 222, "area": 1392, "price": 356352, "color": "#cba34d", "amt": "operator"}, {"id": 141, "name": "Ritterstraße 4", "owner": "Bauhuette_KA", "x_min": 232, "z_min": 175, "x_max": 262, "z_max": 222, "area": 1488, "price": 380928, "color": "#cba34d", "amt": "operator"}, {"id": 142, "name": "Ritterstraße 6", "owner": "Malschbach", "x_min": 263, "z_min": 175, "x_max": 279, "z_max": 222, "area": 816, "price": 208896, "color": "#41c899", "amt": null}, {"id": 143, "name": "Ritterstraße 8", "owner": "Emma_Zwo", "x_min": 280, "z_min": 175, "x_max": 312, "z_max": 222, "area": 1584, "price": 405504, "color": "#d039c6", "amt": null}, {"id": 144, "name": "Ritterstraße 10", "owner": "Ben_Dachdecker", "x_min": 313, "z_min": 175, "x_max": 336, "z_max": 222, "area": 1152, "price": 294912, "color": "#47b1d1", "amt": null}, {"id": 145, "name": "Ritterstraße 11", "owner": "Ole_Kran", "x_min": 337, "z_min": 175, "x_max": 359, "z_max": 222, "area": 1104, "price": 282624, "color": "#ac46d8", "amt": null}, {"id": 146, "name": "Douglasstraße 2", "owner": "Ole_Kran", "x_min": -120, "z_min": 245, "x_max": -100, "z_max": 288, "area": 924, "price": 236544, "color": "#ac46d8", "amt": null}, {"id": 147, "name": "Douglasstraße 4", "owner": "Jonas_KA", "x_min": -99, "z_min": 245, "x_max": -70, "z_max": 288, "area": 1320, "price": 337920, "color": "#7bd142", "amt": null}, {"id": 148, "name": "Douglasstraße 6", "owner": "Jonas_KA", "x_min": -69, "z_min": 245, "x_max": -51, "z_max": 288, "area": 836, "price": 214016, "color": "#7bd142", "amt": null}, {"id": 149, "name": "Douglasstraße 7", "owner": "Anna_Baut", "x_min": -50, "z_min": 245, "x_max": -33, "z_max": 288, "area": 792, "price": 202752, "color": "#63c573", "amt": null}, {"id": 150, "name": "Douglasstraße 8", "owner": "Ida_Fenster", "x_min": -32, "z_min": 245, "x_max": -11, "z_max": 288, "area": 968, "price": 247808, "color": "#8d2cce", "amt": null}, {"id": 151, "name": "Douglasstraße 9", "owner": "Neureuter", "x_min": -10, "z_min": 245, "x_max": 19, "z_max": 288, "area": 1320, "price": 337920, "color": "#d12ec9", "amt": null}, {"id": 152, "name": "Douglasstraße 10", "owner": "Neureuter", "x_min": 20, "z_min": 245, "x_max": 47, "z_max": 288, "area": 1232, "price": 315392, "color": "#d12ec9", "amt": null}, {"id": 153, "name": "Douglasstraße 12", "owner": "Alessandro", "x_min": 48, "z_min": 245, "x_max": 66, "z_max": 288, "area": 836, "price": 214016, "color": "#c7765c", "amt": "admin"}, {"id": 154, "name": "Douglasstraße 13", "owner": "Alessandro", "x_min": 67, "z_min": 245, "x_max": 99, "z_max": 288, "area": 1452, "price": 371712, "color": "#c7765c", "amt": "admin"}, {"id": 155, "name": "Douglasstraße 14", "owner": "Alessandro", "x_min": 100, "z_min": 245, "x_max": 129, "z_max": 288, "area": 1320, "price": 337920, "color": "#c7765c", "amt": "admin"}, {"id": 156, "name": "Durlacher Allee 1", "owner": "Oststadt_Ole", "x_min": 1150, "z_min": -120, "x_max": 1181, "z_max": -91, "area": 960, "price": 245760, "color": "#c96054", "amt": null}, {"id": 157, "name": "Durlacher Allee 2", "owner": "Tobi1899", "x_min": 1208, "z_min": -120, "x_max": 1249, "z_max": -93, "area": 1176, "price": 301056, "color": "#c55eb5", "amt": null}, {"id": 158, "name": "Durlacher Allee 3", "owner": "Anna_Baut", "x_min": 1266, "z_min": -120, "x_max": 1293, "z_max": -83, "area": 1064, "price": 272384, "color": "#63c573", "amt": null}, {"id": 159, "name": "Durlacher Allee 5", "owner": "Anna_Baut", "x_min": 1324, "z_min": -120, "x_max": 1366, "z_max": -81, "area": 1720, "price": 440320, "color": "#63c573", "amt": null}, {"id": 160, "name": "Durlacher Allee 6", "owner": "Alb_Anrainer", "x_min": 1382, "z_min": -120, "x_max": 1417, "z_max": -93, "area": 1008, "price": 258048, "color": "#607fcd", "amt": null}, {"id": 161, "name": "Durlacher Allee 7", "owner": "Kaiserpassage", "x_min": 1150, "z_min": -58, "x_max": 1192, "z_max": -16, "area": 1849, "price": 473344, "color": "#3eb1c1", "amt": null}, {"id": 162, "name": "Durlacher Allee 9", "owner": "Rheinhafen", "x_min": 1208, "z_min": -58, "x_max": 1239, "z_max": -18, "area": 1312, "price": 335872, "color": "#d24698", "amt": null}, {"id": 163, "name": "Durlacher Allee 11", "owner": "Rheinhafen", "x_min": 1266, "z_min": -58, "x_max": 1293, "z_max": -30, "area": 812, "price": 207872, "color": "#d24698", "amt": null}, {"id": 164, "name": "Durlacher Allee 13", "owner": "Schlossgeist", "x_min": 1324, "z_min": -58, "x_max": 1356, "z_max": -26, "area": 1089, "price": 278784, "color": "#d63db2", "amt": null}, {"id": 165, "name": "Durlacher Allee 14", "owner": "MarkgrafLudwig", "x_min": 1382, "z_min": -58, "x_max": 1419, "z_max": -15, "area": 1672, "price": 428032, "color": "#5a3ecc", "amt": null}, {"id": 166, "name": "Durlacher Allee 16", "owner": "Alessandro", "x_min": 1150, "z_min": 4, "x_max": 1188, "z_max": 41, "area": 1482, "price": 379392, "color": "#c7765c", "amt": "admin"}, {"id": 167, "name": "Durlacher Allee 18", "owner": "Alessandro", "x_min": 1208, "z_min": 4, "x_max": 1243, "z_max": 38, "area": 1260, "price": 322560, "color": "#c7765c", "amt": "admin"}, {"id": 168, "name": "Durlacher Allee 19", "owner": "Alessandro", "x_min": 1266, "z_min": 4, "x_max": 1306, "z_max": 31, "area": 1148, "price": 293888, "color": "#c7765c", "amt": "admin"}, {"id": 169, "name": "Durlacher Allee 21", "owner": "Suedweststadt", "x_min": 1324, "z_min": 4, "x_max": 1358, "z_max": 39, "area": 1260, "price": 322560, "color": "#7e5dc6", "amt": null}, {"id": 170, "name": "Durlacher Allee 23", "owner": "Zirkelzieher", "x_min": 1382, "z_min": 4, "x_max": 1418, "z_max": 36, "area": 1221, "price": 312576, "color": "#b943d0", "amt": null}, {"id": 171, "name": "Rüppurrer Straße 1", "owner": "Klaraaa", "x_min": -780, "z_min": 260, "x_max": -751, "z_max": 299, "area": 1200, "price": 307200, "color": "#51c23d", "amt": null}, {"id": 172, "name": "Rüppurrer Straße 2", "owner": "Mira_Bau", "x_min": -722, "z_min": 260, "x_max": -683, "z_max": 298, "area": 1560, "price": 399360, "color": "#c94a8c", "amt": null}, {"id": 173, "name": "Rüppurrer Straße 3", "owner": "Marie_KA", "x_min": -664, "z_min": 260, "x_max": -629, "z_max": 303, "area": 1584, "price": 405504, "color": "#a34dd5", "amt": null}, {"id": 174, "name": "Rüppurrer Straße 4", "owner": "Kronenplatz", "x_min": -606, "z_min": 260, "x_max": -564, "z_max": 292, "area": 1419, "price": 363264, "color": "#50beb7", "amt": null}, {"id": 175, "name": "Rüppurrer Straße 6", "owner": "Oststadt_Ole", "x_min": -780, "z_min": 322, "x_max": -746, "z_max": 361, "area": 1400, "price": 358400, "color": "#c96054", "amt": null}, {"id": 176, "name": "Rüppurrer Straße 8", "owner": "Jule_Mauer", "x_min": -722, "z_min": 322, "x_max": -686, "z_max": 351, "area": 1110, "price": 284160, "color": "#4bc399", "amt": null}, {"id": 177, "name": "Rüppurrer Straße 10", "owner": "Leon_1899", "x_min": -664, "z_min": 322, "x_max": -625, "z_max": 356, "area": 1400, "price": 358400, "color": "#79db51", "amt": null}, {"id": 178, "name": "Rüppurrer Straße 11", "owner": "Yannik42", "x_min": -606, "z_min": 322, "x_max": -573, "z_max": 358, "area": 1258, "price": 322048, "color": "#bd864c", "amt": null}, {"id": 179, "name": "Ettlinger Straße 1", "owner": "Zirkelzieher", "x_min": 620, "z_min": 420, "x_max": 655, "z_max": 450, "area": 1116, "price": 285696, "color": "#b943d0", "amt": null}, {"id": 180, "name": "Ettlinger Straße 3", "owner": "Alessandro", "x_min": 678, "z_min": 420, "x_max": 705, "z_max": 463, "area": 1232, "price": 315392, "color": "#c7765c", "amt": "admin"}, {"id": 181, "name": "Ettlinger Straße 4", "owner": "Alessandro", "x_min": 736, "z_min": 420, "x_max": 773, "z_max": 461, "area": 1596, "price": 408576, "color": "#c7765c", "amt": "admin"}, {"id": 182, "name": "Ettlinger Straße 6", "owner": "Grotzingen", "x_min": 794, "z_min": 420, "x_max": 833, "z_max": 447, "area": 1120, "price": 286720, "color": "#4c9bd6", "amt": null}, {"id": 183, "name": "Ettlinger Straße 7", "owner": "Hardtwald", "x_min": 620, "z_min": 482, "x_max": 663, "z_max": 525, "area": 1936, "price": 495616, "color": "#33c1b6", "amt": null}, {"id": 184, "name": "Ettlinger Straße 8", "owner": "Pfinztalbahn", "x_min": 678, "z_min": 482, "x_max": 717, "z_max": 525, "area": 1760, "price": 450560, "color": "#6dca63", "amt": null}, {"id": 185, "name": "Ettlinger Straße 9", "owner": "Grotzingen", "x_min": 736, "z_min": 482, "x_max": 777, "z_max": 511, "area": 1260, "price": 322560, "color": "#4c9bd6", "amt": null}, {"id": 186, "name": "Ettlinger Straße 10", "owner": "Kaiserpassage", "x_min": 794, "z_min": 482, "x_max": 835, "z_max": 514, "area": 1386, "price": 354816, "color": "#3eb1c1", "amt": null}, {"id": 187, "name": "Schlossplatz 1", "owner": "Alessandro", "x_min": -150, "z_min": -320, "x_max": 149, "z_max": -171, "area": 45000, "price": 11520000, "color": "#c7765c", "amt": "admin"}, {"id": 188, "name": "Hauptbahnhof", "owner": "Bauhuette_KA", "x_min": -180, "z_min": 520, "x_max": 239, "z_max": 609, "area": 37800, "price": 9676800, "color": "#cba34d", "amt": "operator"}, {"id": 189, "name": "Betriebshof Ost", "owner": "Badenser42", "x_min": 1600, "z_min": 180, "x_max": 1759, "z_max": 299, "area": 19200, "price": 4915200, "color": "#bf4075", "amt": "operator"}, {"id": 190, "name": "Waldsiedlung", "owner": "Hardtwald", "x_min": -1450, "z_min": -880, "x_max": -1341, "z_max": -771, "area": 12100, "price": 3097600, "color": "#33c1b6", "amt": null}], "-1": [{"id": 191, "name": "Nether-Depot", "owner": "Mystiker", "x_min": 0, "z_min": 0, "x_max": 39, "z_max": 39, "area": 1600, "price": 409600, "color": "#3a97bb", "amt": "moderator"}, {"id": 192, "name": "Portalstation Süd", "owner": "Turmspitze", "x_min": 90, "z_min": -60, "x_max": 121, "z_max": -13, "area": 1536, "price": 393216, "color": "#82be46", "amt": null}, {"id": 193, "name": "Netherbahn-Tunnel", "owner": "Alessandro", "x_min": -140, "z_min": 20, "x_max": -81, "z_max": 43, "area": 1440, "price": 368640, "color": "#c7765c", "amt": "admin"}]};
 const dimensionNamen = {"-1": "Nether", "-2147483648": "Mystcraft-Profiler", "0": "Oberwelt", "1": "Ende"};
 const URSPRUNG_LABEL = "Pyramide  0 | 0";
+const GEO            = {"lat": 49.00923, "lon": 8.4039, "rotation": 4, "dimension": 0, "kacheln": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "maxZoom": 19, "nachweis": "OpenStreetMap-Mitwirkende", "nachweisUrl": "https://www.openstreetmap.org/copyright"};
+const aemter         = {"admin": {"name": "Administrator", "kuerzel": "ADMIN", "farbe": "#AA0000", "kontrast": "#FFFFFF"}, "operator": {"name": "Operator", "kuerzel": "OP", "farbe": "#FFAA00", "kontrast": "#17110F"}, "moderator": {"name": "Moderator", "kuerzel": "MOD", "farbe": "#00AA00", "kontrast": "#FFFFFF"}};
+const amtsRang       = ["admin", "operator", "moderator"];
+
+function amtVon(plot){ return plot.amt ? aemter[plot.amt] : null; }
 
 const leinwand = document.getElementById('leinwand');
 const ctx      = leinwand.getContext('2d');
@@ -258,7 +301,79 @@ let plots = [];
 let hover = null;
 let markiert = null;      // hervorgehobener Eigentümer aus der Legende
 let zieht = false, letzteX = 0, letzteY = 0;
+let stadtplan = false;                 // Stadtplan hinterlegt?
+const kachelCache = new Map();         // "z/x/y" -> Image (oder null bei Fehler)
 let zeichenAnfrage = null;
+
+/* ---------- Georeferenzierung ----------
+   Uebernommen aus dem Koordinatenrechner, damit beide Werkzeuge denselben
+   Punkt meinen: Vincenty "direct" auf dem WGS84-Ellipsoid, reale Peilung ist
+   der Minecraft-Winkel zuzueglich der Weltrotation. -------------------- */
+
+const WGS84 = {a: 6378137, b: 6356752.314245, f: 1 / 298.257223563};
+
+function vincentyDirekt(lat1, lon1, peilungGrad, distanz){
+  const phi1 = lat1 * Math.PI / 180;
+  const lam1 = lon1 * Math.PI / 180;
+  const alpha1 = peilungGrad * Math.PI / 180;
+  const a = WGS84.a, b = WGS84.b, f = WGS84.f;
+
+  const sinA1 = Math.sin(alpha1), cosA1 = Math.cos(alpha1);
+  const tanU1 = (1 - f) * Math.tan(phi1);
+  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+  const sinU1 = tanU1 * cosU1;
+
+  const sigma1 = Math.atan2(tanU1, cosA1);
+  const sinAlpha = cosU1 * sinA1;
+  const cosSqAlpha = 1 - sinAlpha * sinAlpha;
+  const uSq = cosSqAlpha * (a * a - b * b) / (b * b);
+  const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+  const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+
+  let sigma = distanz / (b * A), sigmaVor, grenze = 100, cos2SigmaM, sinSigma, cosSigma;
+  do {
+    cos2SigmaM = Math.cos(2 * sigma1 + sigma);
+    sinSigma = Math.sin(sigma);
+    cosSigma = Math.cos(sigma);
+    const dSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
+                   B / 6 * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+    sigmaVor = sigma;
+    sigma = distanz / (b * A) + dSigma;
+  } while (Math.abs(sigma - sigmaVor) > 1e-12 && --grenze > 0);
+
+  if(grenze === 0) return null;
+
+  const tmp = sinU1 * sinSigma - cosU1 * cosSigma * cosA1;
+  const phi2 = Math.atan2(sinU1 * cosSigma + cosU1 * sinSigma * cosA1,
+                          (1 - f) * Math.sqrt(sinAlpha * sinAlpha + tmp * tmp));
+  const lam = Math.atan2(sinSigma * sinA1, cosU1 * cosSigma - sinU1 * sinSigma * cosA1);
+  const C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
+  const L = lam - (1 - C) * f * sinAlpha *
+            (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
+  const lam2 = ((lam1 + L + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+
+  return {lat: phi2 * 180 / Math.PI, lon: lam2 * 180 / Math.PI};
+}
+
+function mcZuLatLon(mcX, mcZ){
+  const distanz = Math.sqrt(mcX * mcX + mcZ * mcZ);
+  if(distanz === 0) return {lat: GEO.lat, lon: GEO.lon};
+  const winkel = Math.atan2(mcX, -mcZ) * 180 / Math.PI;
+  const peilung = (winkel + GEO.rotation + 360) % 360;
+  return vincentyDirekt(GEO.lat, GEO.lon, peilung, distanz) || {lat: GEO.lat, lon: GEO.lon};
+}
+
+// Weltkoordinate in Mercator-Pixel der gewaehlten Kachelstufe
+function mercator(punkt, stufe){
+  const n = 256 * Math.pow(2, stufe);
+  const s = Math.sin(punkt.lat * Math.PI / 180);
+  return {
+    x: (punkt.lon + 180) / 360 * n,
+    y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n
+  };
+}
+
+function mercatorAusMc(x, z, stufe){ return mercator(mcZuLatLon(x, z), stufe); }
 
 /* ---------- Hilfsfunktionen ---------- */
 
@@ -345,6 +460,7 @@ function dimensionLaden(){
   alleszeigen();
   legendeAufbauen();
   bilanzAktualisieren();
+  osmVerfuegbarkeit();
 }
 
 function alleszeigen(){
@@ -372,15 +488,104 @@ function gitterSchritt(){
   return 65536;
 }
 
+/* ---------- Stadtplan ---------- */
+
+function georeferenziert(){ return dimension === String(GEO.dimension); }
+
+// Kachelstufe so waehlen, dass eine Kachelpixel ungefaehr einem Bildschirm-
+// pixel entspricht: Meter je Kachelpixel = 156543,03 * cos(Breite) / 2^Stufe.
+function kachelStufe(){
+  const breitengrad = Math.cos(GEO.lat * Math.PI / 180);
+  const stufe = Math.log2(156543.03392 * breitengrad * scale);
+  return Math.max(0, Math.min(GEO.maxZoom, Math.round(stufe)));
+}
+
+function kachelHolen(stufe, kx, ky){
+  const schluessel = stufe + '/' + kx + '/' + ky;
+  if(kachelCache.has(schluessel)) return kachelCache.get(schluessel);
+
+  const bild = new Image();
+  kachelCache.set(schluessel, bild);
+  bild.onload  = () => anfordern();
+  bild.onerror = () => kachelCache.set(schluessel, null);
+  bild.src = GEO.kacheln
+    .replace('{z}', stufe).replace('{x}', kx).replace('{y}', ky);
+
+  // Cache begrenzen, damit lange Sitzungen den Speicher nicht volllaufen lassen
+  if(kachelCache.size > 400){
+    const aeltester = kachelCache.keys().next().value;
+    kachelCache.delete(aeltester);
+  }
+  return bild;
+}
+
+// Minecraft- und Mercator-Raster stehen um die Weltrotation verdreht
+// zueinander. Statt jede Kachel einzeln zu drehen, wird die Umrechnung um die
+// Bildmitte linearisiert und als Transformationsmatrix an die Leinwand gegeben.
+function kachelnZeichnen(){
+  const stufe = kachelStufe();
+  const d = 256;  // Stuetzweite der Naeherung in Bloecken
+
+  const m0 = mercatorAusMc(viewX, viewZ, stufe);
+  const mx = mercatorAusMc(viewX + d, viewZ, stufe);
+  const mz = mercatorAusMc(viewX, viewZ + d, stufe);
+
+  const j11 = (mx.x - m0.x) / d, j12 = (mz.x - m0.x) / d;
+  const j21 = (mx.y - m0.y) / d, j22 = (mz.y - m0.y) / d;
+  const det = j11 * j22 - j12 * j21;
+  if(!det || !isFinite(det)) return;
+
+  // Kehrmatrix: Mercator-Pixel -> Bloecke, anschliessend auf Bildschirm skaliert
+  const a =  scale * ( j22 / det), c = scale * (-j12 / det);
+  const b =  scale * (-j21 / det), dd = scale * ( j11 / det);
+  const e = breite / 2 - (a * m0.x + c * m0.y);
+  const f = hoehe  / 2 - (b * m0.x + dd * m0.y);
+
+  // Sichtbaren Bereich in Kachelnummern umrechnen
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for(const [ex, ey] of [[0,0],[breite,0],[0,hoehe],[breite,hoehe]]){
+    const welt = zuWelt(ex, ey);
+    const m = mercatorAusMc(welt.x, welt.z, stufe);
+    minX = Math.min(minX, m.x); maxX = Math.max(maxX, m.x);
+    minY = Math.min(minY, m.y); maxY = Math.max(maxY, m.y);
+  }
+
+  const grenze = Math.pow(2, stufe);
+  const von = { x: Math.floor(minX / 256) - 1, y: Math.floor(minY / 256) - 1 };
+  const bis = { x: Math.floor(maxX / 256) + 1, y: Math.floor(maxY / 256) + 1 };
+  if((bis.x - von.x + 1) * (bis.y - von.y + 1) > 240) return;  // Notbremse
+
+  ctx.save();
+  ctx.transform(a, b, c, dd, e, f);
+  ctx.imageSmoothingQuality = 'high';
+  // Kacheln in den dunklen Kartenklang einpassen
+  ctx.filter = 'grayscale(.45) brightness(.72) contrast(1.05)';
+
+  for(let ky = von.y; ky <= bis.y; ky++){
+    if(ky < 0 || ky >= grenze) continue;
+    for(let kx = von.x; kx <= bis.x; kx++){
+      const kachel = kachelHolen(stufe, ((kx % grenze) + grenze) % grenze, ky);
+      if(kachel && kachel.complete && kachel.naturalWidth){
+        // halbes Pixel Ueberlappung gegen Fugen zwischen den Kacheln
+        ctx.drawImage(kachel, kx * 256, ky * 256, 256.5, 256.5);
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function zeichnen(){
   ctx.clearRect(0, 0, breite, hoehe);
-  gitterZeichnen();
+  const plan = stadtplan && georeferenziert();
+  if(plan) kachelnZeichnen();
+  gitterZeichnen(plan);
   for(const p of plots) plotZeichnen(p);
   ursprungZeichnen();
   massstabAktualisieren();
 }
 
-function gitterZeichnen(){
+function gitterZeichnen(gedaempft){
+  const d = gedaempft ? .45 : 1;   // ueber dem Stadtplan tritt das Raster zurueck
   const schritt = gitterSchritt();
   const grob    = schritt * 4;
   const links = viewX - breite/(2*scale),  rechts = viewX + breite/(2*scale);
@@ -400,11 +605,11 @@ function gitterZeichnen(){
     ctx.stroke();
   }
 
-  linien(schritt, 'rgba(201,162,39,.07)', 1);
-  linien(grob,    'rgba(201,162,39,.16)', 1);
+  linien(schritt, 'rgba(201,162,39,' + (.07 * d) + ')', 1);
+  linien(grob,    'rgba(201,162,39,' + (.16 * d) + ')', 1);
 
   // Hauptachsen durch den Nullpunkt
-  ctx.strokeStyle = 'rgba(242,194,48,.32)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(242,194,48,' + (.32 * d) + ')'; ctx.lineWidth = 1;
   ctx.beginPath();
   const o = zuBild(0, 0);
   ctx.moveTo(Math.round(o.x)+.5, 0); ctx.lineTo(Math.round(o.x)+.5, hoehe);
@@ -447,7 +652,8 @@ function plotZeichnen(p){
   ctx.save();
   if(gedimmt) ctx.globalAlpha = .22;
 
-  ctx.fillStyle = hexZuRgba(p.color, aktiv ? .78 : .55);
+  const plan = stadtplan && georeferenziert();
+  ctx.fillStyle = hexZuRgba(p.color, aktiv ? (plan ? .68 : .78) : (plan ? .40 : .55));
   ctx.fillRect(a.x, a.y, w, h);
 
   ctx.strokeStyle = aktiv ? '#F2C230' : p.color;
@@ -458,17 +664,26 @@ function plotZeichnen(p){
     ctx.save();
     ctx.beginPath(); ctx.rect(a.x, a.y, w, h); ctx.clip();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 4;
+    ctx.lineJoin = 'round';
 
+    // Dunkle Kontur statt Schlagschatten: haelt auch die gesaettigten
+    // Amtsfarben auf hellen Grundstuecksflaechen lesbar.
+    const amt = amtVon(p);
     const zweizeilig = h > 40 && w > 90;
+    const mx = a.x + w/2, my = a.y + h/2;
+
     ctx.font = '600 12px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(p.owner, a.x + w/2, a.y + h/2 - (zweizeilig ? 8 : 0));
+    ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
+    ctx.strokeText(p.owner, mx, my - (zweizeilig ? 8 : 0));
+    ctx.fillStyle = amt ? amt.farbe : '#fff';
+    ctx.fillText(p.owner, mx, my - (zweizeilig ? 8 : 0));
 
     if(zweizeilig){
       ctx.font = '11px Georgia, serif';
-      ctx.fillStyle = 'rgba(240,217,122,.9)';
-      ctx.fillText(p.name, a.x + w/2, a.y + h/2 + 9);
+      ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineWidth = 3;
+      ctx.strokeText(p.name, mx, my + 9);
+      ctx.fillStyle = 'rgba(240,217,122,.92)';
+      ctx.fillText(p.name, mx, my + 9);
     }
     ctx.restore();
   }
@@ -491,7 +706,8 @@ function legendeAufbauen(){
 
   const nachEigentuemer = new Map();
   for(const p of plots){
-    const e = nachEigentuemer.get(p.owner) || {owner:p.owner, color:p.color, anzahl:0, flaeche:0};
+    const e = nachEigentuemer.get(p.owner)
+           || {owner:p.owner, color:p.color, amt:p.amt, anzahl:0, flaeche:0};
     e.anzahl++; e.flaeche += p.area;
     nachEigentuemer.set(p.owner, e);
   }
@@ -504,17 +720,34 @@ function legendeAufbauen(){
   }
 
   for(const e of alle){
+    const amt = e.amt ? aemter[e.amt] : null;
     const zeile = document.createElement('div');
     zeile.className = 'eintrag';
+    zeile.title = amt ? e.owner + ' – ' + amt.name : e.owner;
     zeile.innerHTML =
-      '<span class="farbe" style="background:' + e.color + '"></span>' +
-      '<span class="wer"></span>' +
+      '<span class="farbe" style="background:' + e.color +
+        (amt ? ';box-shadow:0 0 0 2px ' + amt.farbe : '') + '"></span>' +
+      '<span class="wer"' + (amt ? ' style="color:' + amt.farbe + '"' : '') + '></span>' +
+      (amt ? '<span class="amt" style="color:' + amt.farbe + '">' + amt.kuerzel + '</span>' : '') +
       '<span class="zahl">' + e.anzahl + '× · ' + flaecheText(e.flaeche) + '</span>';
     zeile.querySelector('.wer').textContent = e.owner;
     zeile.addEventListener('mouseenter', () => { markiert = e.owner; anfordern(); });
     zeile.addEventListener('mouseleave', () => { markiert = null;    anfordern(); });
     liste.appendChild(zeile);
   }
+
+  amtsLegendeAufbauen(alle);
+}
+
+// Erklaert die Namensfarben - aber nur fuer Aemter, die hier auch vorkommen
+function amtsLegendeAufbauen(eintraege){
+  const fuss = document.getElementById('amt-legende');
+  const vorhanden = amtsRang.filter(schluessel => eintraege.some(e => e.amt === schluessel));
+
+  fuss.innerHTML = vorhanden.map(schluessel => {
+    const amt = aemter[schluessel];
+    return '<span><i style="background:' + amt.farbe + '"></i>' + amt.name + '</span>';
+  }).join('');
 }
 
 function bilanzAktualisieren(){
@@ -536,6 +769,15 @@ function plotAn(px, py){
   return null;
 }
 
+// Auf dem hellen Pergament traegt ein gefuelltes Siegel die Amtsfarbe besser
+// als farbige Schrift - besonders beim Orange der Operatoren.
+function amtsSiegel(p){
+  const amt = amtVon(p);
+  if(!amt) return '';
+  return '<span class="siegel" style="background:' + amt.farbe +
+         ';color:' + amt.kontrast + '">' + amt.name + '</span>';
+}
+
 function auszugZeigen(p, px, py){
   if(!p){ auszug.style.display = 'none'; return; }
 
@@ -546,7 +788,7 @@ function auszugZeigen(p, px, py){
       '<div class="name">' + esc(p.name) + '</div>' +
     '</div>' +
     '<dl>' +
-      '<dt>Eigentümer</dt><dd>' + esc(p.owner) + '</dd>' +
+      '<dt>Eigentümer</dt><dd>' + esc(p.owner) + amtsSiegel(p) + '</dd>' +
       '<dt>Lage X</dt><dd>' + nf.format(p.x_min) + ' bis ' + nf.format(p.x_max) + '</dd>' +
       '<dt>Lage Z</dt><dd>' + nf.format(p.z_min) + ' bis ' + nf.format(p.z_max) + '</dd>' +
       '<dt>Fläche</dt><dd>' + flaecheText(p.area) + '</dd>' +
@@ -661,6 +903,38 @@ function mitte(t){
 }
 
 /* ---------- Bedienelemente ---------- */
+
+/* ---------- Stadtplan schalten ---------- */
+
+const osmFeld     = document.getElementById('osm');
+const osmSchalter = document.getElementById('osm-schalter');
+const osmHinweis  = document.getElementById('osm-hinweis');
+const nachweis    = document.getElementById('kc-nachweis');
+
+nachweis.innerHTML = 'Kartengrundlage: <a href="' + GEO.nachweisUrl +
+  '" target="_blank" rel="noopener">&copy; ' + GEO.nachweis + '</a>';
+
+osmFeld.addEventListener('change', () => {
+  stadtplan = osmFeld.checked;
+  nachweisAktualisieren();
+  anfordern();
+});
+
+function nachweisAktualisieren(){
+  nachweis.classList.toggle('an', stadtplan && georeferenziert());
+}
+
+// Nur die Oberwelt liegt ueber dem echten Karlsruhe - in anderen Dimensionen
+// waere ein Stadtplan sinnlos, der Schalter wird dort gesperrt.
+function osmVerfuegbarkeit(){
+  const moeglich = georeferenziert();
+  osmFeld.disabled = !moeglich;
+  osmSchalter.classList.toggle('gesperrt', !moeglich);
+  osmHinweis.textContent = moeglich
+    ? 'OpenStreetMap'
+    : 'Nur in der Oberwelt verfügbar';
+  nachweisAktualisieren();
+}
 
 document.getElementById('rein').addEventListener('click',  () => zoomen(1.35));
 document.getElementById('raus').addEventListener('click',  () => zoomen(1/1.35));
