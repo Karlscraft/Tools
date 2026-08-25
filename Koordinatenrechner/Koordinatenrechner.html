@@ -328,6 +328,18 @@
             <input type="radio" name="baseLayer" value="lglDop">
             Luftbild aktuell (LGL BW, 20cm)
         </label>
+        <label>
+            <input type="radio" name="baseLayer" value="vektorFarbe">
+            🔍 Vektor Farbe (basemap.de)
+        </label>
+        <label>
+            <input type="radio" name="baseLayer" value="vektorGrau">
+            🔍 Vektor Grau (basemap.de)
+        </label>
+        <label>
+            <input type="radio" name="baseLayer" value="vektorRelief">
+            🔍 Vektor Relief (basemap.de)
+        </label>
         <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
         <p style="font-size: 13px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">🚆 OpenRailwayMap</p>
         <label>
@@ -412,27 +424,41 @@
         const ROTATION_ANGLE = 4; // Grad Neigung für gerade Kaiserstraße
         
         // Initialisiere Karte
-        const map = L.map('map').setView([ORIGIN_LAT, ORIGIN_LON], 15);
+        // maxZoom 21 statt der Rasterkachel-Grenze 19: Vektorkacheln bleiben
+        // dabei gestochen scharf, Rasterlayer werden ab maxNativeZoom lediglich
+        // hochskaliert (unscharf, aber sie verschwinden nicht).
+        const MAX_ZOOM = 21;
+        const map = L.map('map', { maxZoom: MAX_ZOOM }).setView([ORIGIN_LAT, ORIGIN_LON], 15);
+        
+        // Eigene Ebene (Pane) für die Vektorkarte, unterhalb der Rasterkacheln
+        // (tilePane liegt bei z-index 200), damit Overlays wie Bahn, Kataster
+        // und Radwege zuverlässig über der Vektor-Basiskarte liegen.
+        map.createPane('vectorBasePane');
+        map.getPane('vectorBasePane').style.zIndex = 190;
         
         // Layer definieren
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
+            maxNativeZoom: 19,
+            maxZoom: MAX_ZOOM
         });
         
         const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenTopoMap contributors',
-            maxZoom: 17
+            maxNativeZoom: 17,
+            maxZoom: MAX_ZOOM
         });
         
         const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             attribution: 'Tiles © Esri, Maxar, Earthstar Geographics',
-            maxZoom: 19
+            maxNativeZoom: 19,
+            maxZoom: MAX_ZOOM
         });
         
         // Aktuelles Luftbild (DOP 20cm) - LGL Baden-Württemberg, Open Data.
         // Layername (IMAGES_DOP_20_RGB) und EPSG:3857-Unterstützung per
         // GetCapabilities verifiziert. Höher aufgelöst als Esri für die Region.
+        // WMS rendert serverseitig pro Ausschnitt, braucht daher kein maxNativeZoom.
         const dopYear = new Date().getFullYear();
         const lglDopLayer = L.tileLayer.wms('https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C?', {
             layers: 'IMAGES_DOP_20_RGB',
@@ -440,7 +466,7 @@
             transparent: false,
             version: '1.3.0',
             attribution: `LGL-BW (${dopYear}) Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de`,
-            maxZoom: 19
+            maxZoom: MAX_ZOOM
         });
         
         const baseLayers = { osm: osmLayer, topo: topoLayer, satellite: satelliteLayer, lglDop: lglDopLayer };
@@ -449,7 +475,8 @@
         // von OpenStreetMap-Daten, gedacht als Overlay über einer Basiskarte.
         const cyclingLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
             attribution: '© CyclOSM, © OpenStreetMap contributors',
-            maxZoom: 20,
+            maxNativeZoom: 20,
+            maxZoom: MAX_ZOOM,
             subdomains: 'abc'
         });
         
@@ -462,7 +489,8 @@
         function createRailwayLayer(style) {
             return L.tileLayer(`https://{s}.tiles.openrailwaymap.org/${style}/{z}/{x}/{y}.png`, {
                 attribution: '© OpenRailwayMap contributors',
-                maxZoom: 19,
+                maxNativeZoom: 19,
+                maxZoom: MAX_ZOOM,
                 subdomains: 'abc'
             });
         }
@@ -485,28 +513,136 @@
             transparent: true,
             version: '1.3.0',
             attribution: `LGL-BW (${katasterYear}) Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de`,
-            maxZoom: 19
+            maxZoom: MAX_ZOOM
         });
+        
+        // ---- Vektorkarte (basemap.de Web Vektor, BKG) ----
+        // Amtliche deutsche Vektorkacheln, kostenfrei und ohne API-Schlüssel.
+        // Vorteil gegenüber Rasterkacheln: die Karte wird im Browser aus Geometrie
+        // gerendert und bleibt daher auch weit über Zoom 19 hinaus scharf.
+        // Gerendert wird über MapLibre GL, eingebunden in Leaflet per Adapter -
+        // beide Bibliotheken werden erst bei Bedarf nachgeladen (~250 KB), damit
+        // die Seite für alle anderen Nutzer schnell bleibt.
+        const VECTOR_STYLES = {
+            vektorFarbe:  'https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_col.json',
+            vektorGrau:   'https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_gry.json',
+            vektorRelief: 'https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_top.json'
+        };
+        const vectorLayers = {}; // erst bei erster Auswahl erzeugt
+        let maplibreLoading = null;
+        
+        function ladeSkript(src) {
+            return new Promise((resolve, reject) => {
+                const el = document.createElement('script');
+                el.src = src;
+                el.onload = resolve;
+                el.onerror = () => reject(new Error('Konnte nicht geladen werden: ' + src));
+                document.head.appendChild(el);
+            });
+        }
+        
+        function ladeStylesheet(href) {
+            const el = document.createElement('link');
+            el.rel = 'stylesheet';
+            el.href = href;
+            document.head.appendChild(el);
+        }
+        
+        // MapLibre + Leaflet-Adapter genau einmal nachladen (Reihenfolge zählt:
+        // der Adapter erwartet die globalen Objekte L und maplibregl).
+        function ladeMaplibre() {
+            if (!maplibreLoading) {
+                maplibreLoading = (async () => {
+                    ladeStylesheet('https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css');
+                    await ladeSkript('https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js');
+                    await ladeSkript('https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js');
+                })().catch(err => {
+                    maplibreLoading = null; // erneuten Versuch erlauben
+                    throw err;
+                });
+            }
+            return maplibreLoading;
+        }
+        
+        async function holeBasiskarte(key) {
+            if (baseLayers[key]) return baseLayers[key];
+            
+            if (VECTOR_STYLES[key]) {
+                if (!vectorLayers[key]) {
+                    await ladeMaplibre();
+                    vectorLayers[key] = L.maplibreGL({
+                        style: VECTOR_STYLES[key],
+                        pane: 'vectorBasePane'
+                    });
+                }
+                return vectorLayers[key];
+            }
+            
+            return osmLayer;
+        }
         
         // Standard-Basiskarte hinzufügen
         osmLayer.addTo(map);
         let currentBaseLayer = osmLayer;
         
-        // Basiskarten-Steuerung (OSM / Topo / Satellit - gegenseitig exklusiv)
+        // Overlays wieder über die (neue) Basiskarte legen
+        function overlaysNachVornHolen() {
+            if (map.hasLayer(cyclingLayer)) {
+                cyclingLayer.bringToFront();
+            }
+            if (map.hasLayer(katasterLayer)) {
+                katasterLayer.bringToFront();
+            }
+            if (currentRailwayLayer) {
+                currentRailwayLayer.bringToFront();
+            }
+        }
+        
+        // Basiskarten-Steuerung (gegenseitig exklusiv). Asynchron, weil die
+        // Vektorkarte MapLibre erst nachladen muss.
         document.querySelectorAll('input[name="baseLayer"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                map.removeLayer(currentBaseLayer);
-                currentBaseLayer = baseLayers[e.target.value] || osmLayer;
-                currentBaseLayer.addTo(map);
-                // Overlays ggf. wieder über die neue Basiskarte legen
-                if (map.hasLayer(cyclingLayer)) {
-                    cyclingLayer.bringToFront();
+            radio.addEventListener('change', async (e) => {
+                const key = e.target.value;
+                const statusEl = document.getElementById('searchStatus');
+                const istVektor = !!VECTOR_STYLES[key];
+                
+                if (istVektor && !vectorLayers[key]) {
+                    statusEl.textContent = 'Vektorkarte wird geladen...';
+                    statusEl.className = 'search-status';
                 }
-                if (map.hasLayer(katasterLayer)) {
-                    katasterLayer.bringToFront();
-                }
-                if (currentRailwayLayer) {
-                    currentRailwayLayer.bringToFront();
+                
+                try {
+                    const neueBasis = await holeBasiskarte(key);
+                    
+                    // Falls zwischenzeitlich eine andere Ebene gewählt wurde,
+                    // dieses (veraltete) Ergebnis verwerfen.
+                    const aktuelleAuswahl = document.querySelector('input[name="baseLayer"]:checked');
+                    if (!aktuelleAuswahl || aktuelleAuswahl.value !== key) return;
+                    
+                    map.removeLayer(currentBaseLayer);
+                    currentBaseLayer = neueBasis;
+                    currentBaseLayer.addTo(map);
+                    overlaysNachVornHolen();
+                    
+                    if (istVektor) {
+                        statusEl.textContent = '✓ Vektorkarte aktiv - scharf bis Zoom ' + MAX_ZOOM + '.';
+                        statusEl.className = 'search-status';
+                    }
+                } catch (error) {
+                    // Häufigste Ursachen: kein WebGL im Browser, CDN blockiert.
+                    console.error('Vektorkarte konnte nicht geladen werden:', error);
+                    statusEl.textContent = '❌ Vektorkarte nicht verfügbar (WebGL/Netzwerk).';
+                    statusEl.className = 'search-status search-error';
+                    
+                    // Sauber auf OpenStreetMap zurückfallen
+                    if (currentBaseLayer !== osmLayer) {
+                        map.removeLayer(currentBaseLayer);
+                        currentBaseLayer = osmLayer;
+                        currentBaseLayer.addTo(map);
+                        overlaysNachVornHolen();
+                    }
+                    const osmRadio = document.querySelector('input[name="baseLayer"][value="osm"]');
+                    if (osmRadio) osmRadio.checked = true;
                 }
             });
         });
