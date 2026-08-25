@@ -16,6 +16,7 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import sys
 import urllib.parse
 from copy import deepcopy
@@ -36,6 +37,50 @@ URSPRUNG_LABEL = "Pyramide  0 | 0"
 WAPPEN_URL = ("https://raw.githubusercontent.com/Karlscraft/Tools/"
               "refs/heads/main/Karlscraft%20Logo.png")
 PREIS_PRO_BLOCK = 256  # € je m²
+
+# Georeferenzierung - identisch zum Koordinatenrechner, damit beide Werkzeuge
+# denselben Punkt meinen. Nullpunkt ist die Pyramide am Marktplatz, die
+# 4°-Drehung laesst die Kaiserstrasse in Minecraft gerade verlaufen.
+URSPRUNG_LAT = 49.00923
+URSPRUNG_LON = 8.4039
+WELT_ROTATION = 4          # Grad; reale Peilung = Minecraft-Winkel + Rotation
+GEO_DIMENSION = 0          # nur die Oberwelt liegt ueber dem echten Karlsruhe
+
+# Kachelserver fuer den Stadtplan. tile.openstreetmap.org ist fuer die
+# gelegentliche Nutzung eines kleinen Servers zulaessig; bei staerkerer Last
+# gehoert hier ein eigener oder gemieteter Kachelserver hin.
+OSM_KACHELN = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+OSM_MAX_ZOOM = 19
+OSM_NACHWEIS = "OpenStreetMap-Mitwirkende"
+OSM_NACHWEIS_URL = "https://www.openstreetmap.org/copyright"
+
+# Namensfarben der Amtsträger nach § 4 des Regelwerks. Die Reihenfolge ist die
+# Rangfolge: steht ein Spieler in mehreren Gruppen, gilt der erste Treffer.
+# "gruppen" listet die Gruppennamen aus der permissions.json. Verglichen wird
+# ohne Unterstriche und in Grossbuchstaben, "_ADMIN_" und "admins" treffen also
+# beide. Weichen die Namen auf dem Server ab: hier ergaenzen. Das Skript listet
+# beim Lauf alle Gruppen auf, die es keinem Amt zuordnen konnte.
+AEMTER: List[Dict[str, object]] = [
+    {"schluessel": "admin",
+     "name": "Administrator",
+     "kuerzel": "ADMIN",
+     "farbe": "#AA0000",
+     "gruppen": ["ADMIN", "ADMINS", "ADMINISTRATOR", "OWNER"]},
+    {"schluessel": "operator",
+     "name": "Operator",
+     "kuerzel": "OP",
+     "farbe": "#FFAA00",
+     "gruppen": ["OP", "OPS", "OPERATOR", "OPERATORS", "OPERATOREN"]},
+    {"schluessel": "moderator",
+     "name": "Moderator",
+     "kuerzel": "MOD",
+     "farbe": "#00AA00",
+     "gruppen": ["MOD", "MODS", "MODERATOR", "MODERATORS", "MODERATOREN"]},
+]
+
+# Datei fuer manuelle Amtszuweisungen, falls ein Amt nicht ueber die Gruppen
+# erkennbar ist (etwa wenn der Administrator nur in der ops.json steht).
+AEMTER_DATEI = "aemter.txt"
 
 KOPFZEILEN_LINKS: List[Tuple[str, str]] = [
     ("Tools", "https://karlscraft.github.io/Tools/"),
@@ -162,6 +207,175 @@ class Plot:
             dimension=plot1.dimension,
             plot_id=plot1.plot_id  # Behalte die erste ID
         )
+
+
+# ---------------------------------------------------------------------------
+# Ämter und Namensfarben
+# ---------------------------------------------------------------------------
+
+def _gruppe_normieren(name: str) -> str:
+    """Vergleichsform eines Gruppennamens: ohne Unterstriche, in Großbuchstaben"""
+    return name.strip().strip("_").upper()
+
+
+def _kontrastfarbe(hex_farbe: str) -> str:
+    """Wählt Schwarz oder Weiß, je nachdem was auf der Farbe besser lesbar ist"""
+    r, g, b = (int(hex_farbe[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    helligkeit = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "#17110F" if helligkeit > 0.5 else "#FFFFFF"
+
+
+def _spieler_zerlegen(schluessel: str) -> Tuple[str, str]:
+    """Zerlegt einen Spielerschluessel der Form "(uuid|Name)" in seine Teile"""
+    roh = schluessel.strip().strip("()")
+    if "|" in roh:
+        uuid, name = roh.split("|", 1)
+        return uuid.strip(), name.strip()
+    return roh, ""
+
+
+def sammle_spielergruppen(json_data: dict) -> Dict[Tuple[str, str], Set[str]]:
+    """
+    Durchsucht die gesamte JSON nach den Gruppen der Spieler.
+
+    ForgeEssentials legt diese je nach Version an unterschiedlichen Stellen ab,
+    deshalb wird rekursiv gesucht. Beide gaengigen Schreibweisen werden gelesen:
+
+        "fe.internal.player.groups": "_ADMIN_,_BEWOHNER_"
+        "fe.internal.player.group._ADMIN_": "true"
+    """
+    treffer: Dict[Tuple[str, str], Set[str]] = {}
+
+    def gehe(knoten) -> None:
+        if isinstance(knoten, dict):
+            for schluessel, wert in knoten.items():
+                if schluessel == "playerPermissions" and isinstance(wert, dict):
+                    for spieler, rechte in wert.items():
+                        if not isinstance(rechte, dict):
+                            continue
+                        gruppen: Set[str] = set()
+                        for recht, inhalt in rechte.items():
+                            if recht.startswith("fe.internal.player.group."):
+                                gruppen.add(recht.rsplit(".", 1)[-1])
+                            elif (recht.startswith("fe.internal.player.group")
+                                  and isinstance(inhalt, str)):
+                                gruppen.update(
+                                    t for t in re.split(r"[,;|\s]+", inhalt) if t)
+                        if gruppen:
+                            treffer.setdefault(
+                                _spieler_zerlegen(spieler), set()).update(gruppen)
+                gehe(wert)
+        elif isinstance(knoten, list):
+            for eintrag in knoten:
+                gehe(eintrag)
+
+    gehe(json_data)
+    return treffer
+
+
+def read_aemter_liste(filename: str = AEMTER_DATEI) -> List[Tuple[str, str]]:
+    """
+    Liest manuelle Amtszuweisungen, falls die Datei vorhanden ist.
+
+    Eine Zuweisung pro Zeile, die Raute beginnt einen Kommentar:
+
+        Alessandro = admin
+        Beispielspieler: moderator
+    """
+    if not os.path.exists(filename):
+        return []
+
+    gueltig = {str(a["schluessel"]) for a in AEMTER}
+    kuerzel = {str(a["kuerzel"]).lower(): str(a["schluessel"]) for a in AEMTER}
+    zuordnung: List[Tuple[str, str]] = []
+
+    with open(filename, 'r', encoding='utf-8') as f:
+        for nr, zeile in enumerate(f, 1):
+            zeile = zeile.split('#', 1)[0].strip()
+            if not zeile:
+                continue
+
+            trenner = next((t for t in ('=', ':') if t in zeile), None)
+            if not trenner:
+                print(f"  Warnung: Zeile {nr} ohne Trennzeichen ignoriert: {zeile}")
+                continue
+
+            name, amt = zeile.split(trenner, 1)
+            amt = amt.strip().lower()
+            amt = kuerzel.get(amt, amt)
+
+            if amt in gueltig:
+                zuordnung.append((name.strip(), amt))
+            else:
+                print(f"  Warnung: Unbekanntes Amt in Zeile {nr}: {amt} "
+                      f"(erlaubt: {', '.join(sorted(gueltig))})")
+
+    return zuordnung
+
+
+def parse_aemter(json_data: dict,
+                 manuell: Optional[List[Tuple[str, str]]] = None
+                 ) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    """
+    Ordnet den Spielern ihr Amt zu.
+
+    Rueckgabe:
+        zuordnung – UUID und Name (klein geschrieben) zeigen auf den Amtsschluessel
+        nach_amt  – Amtsschluessel zeigt auf die Liste der Spielernamen
+    """
+    rang_je_gruppe: Dict[str, int] = {}
+    for rang, amt in enumerate(AEMTER):
+        for gruppe in amt["gruppen"]:                      # type: ignore[union-attr]
+            rang_je_gruppe[_gruppe_normieren(str(gruppe))] = rang
+
+    zuordnung: Dict[str, str] = {}
+    nach_amt: Dict[str, List[str]] = {str(a["schluessel"]): [] for a in AEMTER}
+    ohne_zuordnung: Set[str] = set()
+
+    for (uuid, name), gruppen in sammle_spielergruppen(json_data).items():
+        bester: Optional[int] = None
+        for gruppe in gruppen:
+            rang = rang_je_gruppe.get(_gruppe_normieren(gruppe))
+            if rang is None:
+                ohne_zuordnung.add(gruppe)
+            elif bester is None or rang < bester:
+                bester = rang
+
+        if bester is None:
+            continue
+
+        schluessel = str(AEMTER[bester]["schluessel"])
+        if uuid:
+            zuordnung[uuid] = schluessel
+        if name:
+            zuordnung[name.lower()] = schluessel
+            nach_amt[schluessel].append(name)
+
+    # Manuelle Zuweisungen haben Vorrang vor den Gruppen
+    for name, schluessel in (manuell or []):
+        for liste in nach_amt.values():
+            liste[:] = [n for n in liste if n.lower() != name.lower()]
+        zuordnung[name.lower()] = schluessel
+        nach_amt[schluessel].append(name)
+
+    if not any(nach_amt.values()):
+        print("  Kein Amtsträger erkannt.")
+        if ohne_zuordnung:
+            print("  Gefundene Gruppen: " + ", ".join(sorted(ohne_zuordnung)))
+            print(f"  Passenden Namen in AEMTER ergänzen oder {AEMTER_DATEI} anlegen "
+                  f"(Zeilenformat: Spielername = admin).")
+    else:
+        for amt in AEMTER:
+            namen = nach_amt[str(amt["schluessel"])]
+            if namen:
+                print(f"  {amt['name']}: {', '.join(sorted(namen))}")
+
+    return zuordnung, nach_amt
+
+
+def amt_von_plot(plot: Plot, zuordnung: Dict[str, str]) -> Optional[str]:
+    """Ermittelt das Amt des Eigentuemers, bevorzugt anhand der UUID"""
+    return zuordnung.get(plot.owner_uuid) or zuordnung.get(plot.owner_name.lower())
 
 
 # ---------------------------------------------------------------------------
@@ -595,8 +809,8 @@ body{
 }
 .kc-wappen{display:block;height:44px;width:auto;flex:0 0 auto;
   filter:drop-shadow(0 2px 4px rgba(0,0,0,.55))}
-.kc-wappen[hidden]{display:none}
 .kc-wappen svg{height:44px;width:auto;display:block}
+.kc-wappen[hidden]{display:none}
 #kc-titel{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 #kc-titel .wortmarke{
   font-family:var(--serif);font-size:23px;font-weight:700;letter-spacing:.05em;
@@ -652,6 +866,25 @@ select{
 select:hover{border-color:var(--balken)}
 option{background:#1c1513;color:var(--text)}
 
+/* Schalter fuer den Stadtplan */
+.schalter{display:flex;align-items:center;gap:9px;margin-top:12px;padding:8px 9px;
+  border:1px solid rgba(201,162,39,.35);border-radius:2px;cursor:pointer;
+  font-size:13px;transition:background .15s,border-color .15s}
+.schalter:hover{background:rgba(242,194,48,.08);border-color:rgba(242,194,48,.6)}
+.schalter input{accent-color:var(--balken);width:15px;height:15px;cursor:pointer;flex:0 0 auto}
+.schalter.gesperrt{opacity:.42;cursor:not-allowed}
+.schalter.gesperrt:hover{background:none;border-color:rgba(201,162,39,.35)}
+.schalter .hinweis{display:block;font-size:10px;color:var(--text-leise);margin-top:2px}
+
+/* Kartennachweis - bei aktivem Stadtplan Pflicht */
+#kc-nachweis{position:absolute;z-index:20;left:50%;transform:translateX(-50%);
+  bottom:14px;display:none;padding:5px 11px;font-size:10.5px;letter-spacing:.02em;
+  color:var(--text-leise);background:rgba(20,16,15,.85);
+  border:1px solid rgba(201,162,39,.32);border-radius:2px;white-space:nowrap}
+#kc-nachweis.an{display:block}
+#kc-nachweis a{color:var(--gold-hell);text-decoration:none}
+#kc-nachweis a:hover{text-decoration:underline}
+
 .knopfreihe{display:flex;gap:6px;margin-top:12px}
 button.knopf{
   flex:1;padding:8px 0;font-family:var(--sans);font-size:13px;font-weight:600;
@@ -669,8 +902,16 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
   border:1px solid rgba(0,0,0,.5);box-shadow:0 0 0 1px rgba(242,194,48,.3)}
 .eintrag .wer{flex:1;min-width:0;font-size:13px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
+.eintrag .amt{flex:0 0 auto;font-size:9px;font-weight:700;letter-spacing:.1em;
+  padding:1px 4px;border:1px solid currentColor;border-radius:2px}
 .eintrag .zahl{font-size:11px;color:var(--text-leise);font-variant-numeric:tabular-nums}
 .leer{padding:14px 10px;font-size:13px;color:var(--text-leise);line-height:1.5}
+
+#amt-legende{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px 14px;padding:9px 13px;
+  border-top:1px solid rgba(201,162,39,.28);font-size:11px;color:var(--text-leise)}
+#amt-legende:empty{display:none}
+#amt-legende i{display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:6px;vertical-align:0}
 
 /* Bilanz */
 .zeile{display:flex;justify-content:space-between;gap:18px;font-size:13px;padding:3px 0}
@@ -705,6 +946,9 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
 #kc-auszug dt{color:#6B5B48;letter-spacing:.03em;white-space:nowrap}
 #kc-auszug dd{text-align:right;font-variant-numeric:tabular-nums;word-break:break-word}
 #kc-auszug dd.preis{font-family:var(--serif);font-weight:700;font-size:14px;color:var(--rot-tief)}
+#kc-auszug .siegel{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:2px;
+  font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  vertical-align:1px;box-shadow:0 1px 2px rgba(0,0,0,.3)}
 
 /* ---------------- Mobil ---------------- */
 @media (max-width:760px){
@@ -749,6 +993,12 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
         <button class="knopf" id="rein" title="Hineinzoomen" aria-label="Hineinzoomen">+</button>
         <button class="knopf breit" id="alles">Alles zeigen</button>
       </div>
+      <label class="schalter" id="osm-schalter">
+        <input type="checkbox" id="osm">
+        <span>Stadtplan hinterlegen
+          <span class="hinweis" id="osm-hinweis">OpenStreetMap</span>
+        </span>
+      </label>
       <div class="knopfreihe">
         <button class="knopf breit" id="legende-schalter" aria-controls="kc-legende" aria-expanded="true">Eigentümer ausblenden</button>
       </div>
@@ -758,6 +1008,7 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
   <section class="tafel" id="kc-legende">
     <h2>Eigentümer <span id="anzahl-eigentuemer"></span></h2>
     <div class="inhalt" id="legende-liste"></div>
+    <div id="amt-legende"></div>
   </section>
 
   <section class="tafel" id="kc-bilanz">
@@ -776,6 +1027,7 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
     <div class="beschriftung" id="massstab-text">–</div>
   </div>
 
+  <div id="kc-nachweis"></div>
   <div id="kc-auszug"></div>
 </main>
 
@@ -785,6 +1037,11 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
 const plotsData      = __PLOTS_JSON__;
 const dimensionNamen = __DIM_JSON__;
 const URSPRUNG_LABEL = __URSPRUNG_JSON__;
+const GEO            = __GEO_JSON__;
+const aemter         = __AEMTER_JSON__;
+const amtsRang       = __AMTSRANG_JSON__;
+
+function amtVon(plot){ return plot.amt ? aemter[plot.amt] : null; }
 
 const leinwand = document.getElementById('leinwand');
 const ctx      = leinwand.getContext('2d');
@@ -801,7 +1058,79 @@ let plots = [];
 let hover = null;
 let markiert = null;      // hervorgehobener Eigentümer aus der Legende
 let zieht = false, letzteX = 0, letzteY = 0;
+let stadtplan = false;                 // Stadtplan hinterlegt?
+const kachelCache = new Map();         // "z/x/y" -> Image (oder null bei Fehler)
 let zeichenAnfrage = null;
+
+/* ---------- Georeferenzierung ----------
+   Uebernommen aus dem Koordinatenrechner, damit beide Werkzeuge denselben
+   Punkt meinen: Vincenty "direct" auf dem WGS84-Ellipsoid, reale Peilung ist
+   der Minecraft-Winkel zuzueglich der Weltrotation. -------------------- */
+
+const WGS84 = {a: 6378137, b: 6356752.314245, f: 1 / 298.257223563};
+
+function vincentyDirekt(lat1, lon1, peilungGrad, distanz){
+  const phi1 = lat1 * Math.PI / 180;
+  const lam1 = lon1 * Math.PI / 180;
+  const alpha1 = peilungGrad * Math.PI / 180;
+  const a = WGS84.a, b = WGS84.b, f = WGS84.f;
+
+  const sinA1 = Math.sin(alpha1), cosA1 = Math.cos(alpha1);
+  const tanU1 = (1 - f) * Math.tan(phi1);
+  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
+  const sinU1 = tanU1 * cosU1;
+
+  const sigma1 = Math.atan2(tanU1, cosA1);
+  const sinAlpha = cosU1 * sinA1;
+  const cosSqAlpha = 1 - sinAlpha * sinAlpha;
+  const uSq = cosSqAlpha * (a * a - b * b) / (b * b);
+  const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+  const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+
+  let sigma = distanz / (b * A), sigmaVor, grenze = 100, cos2SigmaM, sinSigma, cosSigma;
+  do {
+    cos2SigmaM = Math.cos(2 * sigma1 + sigma);
+    sinSigma = Math.sin(sigma);
+    cosSigma = Math.cos(sigma);
+    const dSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM) -
+                   B / 6 * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+    sigmaVor = sigma;
+    sigma = distanz / (b * A) + dSigma;
+  } while (Math.abs(sigma - sigmaVor) > 1e-12 && --grenze > 0);
+
+  if(grenze === 0) return null;
+
+  const tmp = sinU1 * sinSigma - cosU1 * cosSigma * cosA1;
+  const phi2 = Math.atan2(sinU1 * cosSigma + cosU1 * sinSigma * cosA1,
+                          (1 - f) * Math.sqrt(sinAlpha * sinAlpha + tmp * tmp));
+  const lam = Math.atan2(sinSigma * sinA1, cosU1 * cosSigma - sinU1 * sinSigma * cosA1);
+  const C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
+  const L = lam - (1 - C) * f * sinAlpha *
+            (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
+  const lam2 = ((lam1 + L + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+
+  return {lat: phi2 * 180 / Math.PI, lon: lam2 * 180 / Math.PI};
+}
+
+function mcZuLatLon(mcX, mcZ){
+  const distanz = Math.sqrt(mcX * mcX + mcZ * mcZ);
+  if(distanz === 0) return {lat: GEO.lat, lon: GEO.lon};
+  const winkel = Math.atan2(mcX, -mcZ) * 180 / Math.PI;
+  const peilung = (winkel + GEO.rotation + 360) % 360;
+  return vincentyDirekt(GEO.lat, GEO.lon, peilung, distanz) || {lat: GEO.lat, lon: GEO.lon};
+}
+
+// Weltkoordinate in Mercator-Pixel der gewaehlten Kachelstufe
+function mercator(punkt, stufe){
+  const n = 256 * Math.pow(2, stufe);
+  const s = Math.sin(punkt.lat * Math.PI / 180);
+  return {
+    x: (punkt.lon + 180) / 360 * n,
+    y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n
+  };
+}
+
+function mercatorAusMc(x, z, stufe){ return mercator(mcZuLatLon(x, z), stufe); }
 
 /* ---------- Hilfsfunktionen ---------- */
 
@@ -888,6 +1217,7 @@ function dimensionLaden(){
   alleszeigen();
   legendeAufbauen();
   bilanzAktualisieren();
+  osmVerfuegbarkeit();
 }
 
 function alleszeigen(){
@@ -915,15 +1245,104 @@ function gitterSchritt(){
   return 65536;
 }
 
+/* ---------- Stadtplan ---------- */
+
+function georeferenziert(){ return dimension === String(GEO.dimension); }
+
+// Kachelstufe so waehlen, dass eine Kachelpixel ungefaehr einem Bildschirm-
+// pixel entspricht: Meter je Kachelpixel = 156543,03 * cos(Breite) / 2^Stufe.
+function kachelStufe(){
+  const breitengrad = Math.cos(GEO.lat * Math.PI / 180);
+  const stufe = Math.log2(156543.03392 * breitengrad * scale);
+  return Math.max(0, Math.min(GEO.maxZoom, Math.round(stufe)));
+}
+
+function kachelHolen(stufe, kx, ky){
+  const schluessel = stufe + '/' + kx + '/' + ky;
+  if(kachelCache.has(schluessel)) return kachelCache.get(schluessel);
+
+  const bild = new Image();
+  kachelCache.set(schluessel, bild);
+  bild.onload  = () => anfordern();
+  bild.onerror = () => kachelCache.set(schluessel, null);
+  bild.src = GEO.kacheln
+    .replace('{z}', stufe).replace('{x}', kx).replace('{y}', ky);
+
+  // Cache begrenzen, damit lange Sitzungen den Speicher nicht volllaufen lassen
+  if(kachelCache.size > 400){
+    const aeltester = kachelCache.keys().next().value;
+    kachelCache.delete(aeltester);
+  }
+  return bild;
+}
+
+// Minecraft- und Mercator-Raster stehen um die Weltrotation verdreht
+// zueinander. Statt jede Kachel einzeln zu drehen, wird die Umrechnung um die
+// Bildmitte linearisiert und als Transformationsmatrix an die Leinwand gegeben.
+function kachelnZeichnen(){
+  const stufe = kachelStufe();
+  const d = 256;  // Stuetzweite der Naeherung in Bloecken
+
+  const m0 = mercatorAusMc(viewX, viewZ, stufe);
+  const mx = mercatorAusMc(viewX + d, viewZ, stufe);
+  const mz = mercatorAusMc(viewX, viewZ + d, stufe);
+
+  const j11 = (mx.x - m0.x) / d, j12 = (mz.x - m0.x) / d;
+  const j21 = (mx.y - m0.y) / d, j22 = (mz.y - m0.y) / d;
+  const det = j11 * j22 - j12 * j21;
+  if(!det || !isFinite(det)) return;
+
+  // Kehrmatrix: Mercator-Pixel -> Bloecke, anschliessend auf Bildschirm skaliert
+  const a =  scale * ( j22 / det), c = scale * (-j12 / det);
+  const b =  scale * (-j21 / det), dd = scale * ( j11 / det);
+  const e = breite / 2 - (a * m0.x + c * m0.y);
+  const f = hoehe  / 2 - (b * m0.x + dd * m0.y);
+
+  // Sichtbaren Bereich in Kachelnummern umrechnen
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for(const [ex, ey] of [[0,0],[breite,0],[0,hoehe],[breite,hoehe]]){
+    const welt = zuWelt(ex, ey);
+    const m = mercatorAusMc(welt.x, welt.z, stufe);
+    minX = Math.min(minX, m.x); maxX = Math.max(maxX, m.x);
+    minY = Math.min(minY, m.y); maxY = Math.max(maxY, m.y);
+  }
+
+  const grenze = Math.pow(2, stufe);
+  const von = { x: Math.floor(minX / 256) - 1, y: Math.floor(minY / 256) - 1 };
+  const bis = { x: Math.floor(maxX / 256) + 1, y: Math.floor(maxY / 256) + 1 };
+  if((bis.x - von.x + 1) * (bis.y - von.y + 1) > 240) return;  // Notbremse
+
+  ctx.save();
+  ctx.transform(a, b, c, dd, e, f);
+  ctx.imageSmoothingQuality = 'high';
+  // Kacheln in den dunklen Kartenklang einpassen
+  ctx.filter = 'grayscale(.45) brightness(.72) contrast(1.05)';
+
+  for(let ky = von.y; ky <= bis.y; ky++){
+    if(ky < 0 || ky >= grenze) continue;
+    for(let kx = von.x; kx <= bis.x; kx++){
+      const kachel = kachelHolen(stufe, ((kx % grenze) + grenze) % grenze, ky);
+      if(kachel && kachel.complete && kachel.naturalWidth){
+        // halbes Pixel Ueberlappung gegen Fugen zwischen den Kacheln
+        ctx.drawImage(kachel, kx * 256, ky * 256, 256.5, 256.5);
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function zeichnen(){
   ctx.clearRect(0, 0, breite, hoehe);
-  gitterZeichnen();
+  const plan = stadtplan && georeferenziert();
+  if(plan) kachelnZeichnen();
+  gitterZeichnen(plan);
   for(const p of plots) plotZeichnen(p);
   ursprungZeichnen();
   massstabAktualisieren();
 }
 
-function gitterZeichnen(){
+function gitterZeichnen(gedaempft){
+  const d = gedaempft ? .45 : 1;   // ueber dem Stadtplan tritt das Raster zurueck
   const schritt = gitterSchritt();
   const grob    = schritt * 4;
   const links = viewX - breite/(2*scale),  rechts = viewX + breite/(2*scale);
@@ -943,11 +1362,11 @@ function gitterZeichnen(){
     ctx.stroke();
   }
 
-  linien(schritt, 'rgba(201,162,39,.07)', 1);
-  linien(grob,    'rgba(201,162,39,.16)', 1);
+  linien(schritt, 'rgba(201,162,39,' + (.07 * d) + ')', 1);
+  linien(grob,    'rgba(201,162,39,' + (.16 * d) + ')', 1);
 
   // Hauptachsen durch den Nullpunkt
-  ctx.strokeStyle = 'rgba(242,194,48,.32)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(242,194,48,' + (.32 * d) + ')'; ctx.lineWidth = 1;
   ctx.beginPath();
   const o = zuBild(0, 0);
   ctx.moveTo(Math.round(o.x)+.5, 0); ctx.lineTo(Math.round(o.x)+.5, hoehe);
@@ -990,7 +1409,8 @@ function plotZeichnen(p){
   ctx.save();
   if(gedimmt) ctx.globalAlpha = .22;
 
-  ctx.fillStyle = hexZuRgba(p.color, aktiv ? .78 : .55);
+  const plan = stadtplan && georeferenziert();
+  ctx.fillStyle = hexZuRgba(p.color, aktiv ? (plan ? .68 : .78) : (plan ? .40 : .55));
   ctx.fillRect(a.x, a.y, w, h);
 
   ctx.strokeStyle = aktiv ? '#F2C230' : p.color;
@@ -1001,17 +1421,26 @@ function plotZeichnen(p){
     ctx.save();
     ctx.beginPath(); ctx.rect(a.x, a.y, w, h); ctx.clip();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 4;
+    ctx.lineJoin = 'round';
 
+    // Dunkle Kontur statt Schlagschatten: haelt auch die gesaettigten
+    // Amtsfarben auf hellen Grundstuecksflaechen lesbar.
+    const amt = amtVon(p);
     const zweizeilig = h > 40 && w > 90;
+    const mx = a.x + w/2, my = a.y + h/2;
+
     ctx.font = '600 12px "Segoe UI", Arial, sans-serif';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(p.owner, a.x + w/2, a.y + h/2 - (zweizeilig ? 8 : 0));
+    ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.lineWidth = 3;
+    ctx.strokeText(p.owner, mx, my - (zweizeilig ? 8 : 0));
+    ctx.fillStyle = amt ? amt.farbe : '#fff';
+    ctx.fillText(p.owner, mx, my - (zweizeilig ? 8 : 0));
 
     if(zweizeilig){
       ctx.font = '11px Georgia, serif';
-      ctx.fillStyle = 'rgba(240,217,122,.9)';
-      ctx.fillText(p.name, a.x + w/2, a.y + h/2 + 9);
+      ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineWidth = 3;
+      ctx.strokeText(p.name, mx, my + 9);
+      ctx.fillStyle = 'rgba(240,217,122,.92)';
+      ctx.fillText(p.name, mx, my + 9);
     }
     ctx.restore();
   }
@@ -1034,7 +1463,8 @@ function legendeAufbauen(){
 
   const nachEigentuemer = new Map();
   for(const p of plots){
-    const e = nachEigentuemer.get(p.owner) || {owner:p.owner, color:p.color, anzahl:0, flaeche:0};
+    const e = nachEigentuemer.get(p.owner)
+           || {owner:p.owner, color:p.color, amt:p.amt, anzahl:0, flaeche:0};
     e.anzahl++; e.flaeche += p.area;
     nachEigentuemer.set(p.owner, e);
   }
@@ -1047,17 +1477,34 @@ function legendeAufbauen(){
   }
 
   for(const e of alle){
+    const amt = e.amt ? aemter[e.amt] : null;
     const zeile = document.createElement('div');
     zeile.className = 'eintrag';
+    zeile.title = amt ? e.owner + ' – ' + amt.name : e.owner;
     zeile.innerHTML =
-      '<span class="farbe" style="background:' + e.color + '"></span>' +
-      '<span class="wer"></span>' +
+      '<span class="farbe" style="background:' + e.color +
+        (amt ? ';box-shadow:0 0 0 2px ' + amt.farbe : '') + '"></span>' +
+      '<span class="wer"' + (amt ? ' style="color:' + amt.farbe + '"' : '') + '></span>' +
+      (amt ? '<span class="amt" style="color:' + amt.farbe + '">' + amt.kuerzel + '</span>' : '') +
       '<span class="zahl">' + e.anzahl + '× · ' + flaecheText(e.flaeche) + '</span>';
     zeile.querySelector('.wer').textContent = e.owner;
     zeile.addEventListener('mouseenter', () => { markiert = e.owner; anfordern(); });
     zeile.addEventListener('mouseleave', () => { markiert = null;    anfordern(); });
     liste.appendChild(zeile);
   }
+
+  amtsLegendeAufbauen(alle);
+}
+
+// Erklaert die Namensfarben - aber nur fuer Aemter, die hier auch vorkommen
+function amtsLegendeAufbauen(eintraege){
+  const fuss = document.getElementById('amt-legende');
+  const vorhanden = amtsRang.filter(schluessel => eintraege.some(e => e.amt === schluessel));
+
+  fuss.innerHTML = vorhanden.map(schluessel => {
+    const amt = aemter[schluessel];
+    return '<span><i style="background:' + amt.farbe + '"></i>' + amt.name + '</span>';
+  }).join('');
 }
 
 function bilanzAktualisieren(){
@@ -1079,6 +1526,15 @@ function plotAn(px, py){
   return null;
 }
 
+// Auf dem hellen Pergament traegt ein gefuelltes Siegel die Amtsfarbe besser
+// als farbige Schrift - besonders beim Orange der Operatoren.
+function amtsSiegel(p){
+  const amt = amtVon(p);
+  if(!amt) return '';
+  return '<span class="siegel" style="background:' + amt.farbe +
+         ';color:' + amt.kontrast + '">' + amt.name + '</span>';
+}
+
 function auszugZeigen(p, px, py){
   if(!p){ auszug.style.display = 'none'; return; }
 
@@ -1089,7 +1545,7 @@ function auszugZeigen(p, px, py){
       '<div class="name">' + esc(p.name) + '</div>' +
     '</div>' +
     '<dl>' +
-      '<dt>Eigentümer</dt><dd>' + esc(p.owner) + '</dd>' +
+      '<dt>Eigentümer</dt><dd>' + esc(p.owner) + amtsSiegel(p) + '</dd>' +
       '<dt>Lage X</dt><dd>' + nf.format(p.x_min) + ' bis ' + nf.format(p.x_max) + '</dd>' +
       '<dt>Lage Z</dt><dd>' + nf.format(p.z_min) + ' bis ' + nf.format(p.z_max) + '</dd>' +
       '<dt>Fläche</dt><dd>' + flaecheText(p.area) + '</dd>' +
@@ -1205,6 +1661,38 @@ function mitte(t){
 
 /* ---------- Bedienelemente ---------- */
 
+/* ---------- Stadtplan schalten ---------- */
+
+const osmFeld     = document.getElementById('osm');
+const osmSchalter = document.getElementById('osm-schalter');
+const osmHinweis  = document.getElementById('osm-hinweis');
+const nachweis    = document.getElementById('kc-nachweis');
+
+nachweis.innerHTML = 'Kartengrundlage: <a href="' + GEO.nachweisUrl +
+  '" target="_blank" rel="noopener">&copy; ' + GEO.nachweis + '</a>';
+
+osmFeld.addEventListener('change', () => {
+  stadtplan = osmFeld.checked;
+  nachweisAktualisieren();
+  anfordern();
+});
+
+function nachweisAktualisieren(){
+  nachweis.classList.toggle('an', stadtplan && georeferenziert());
+}
+
+// Nur die Oberwelt liegt ueber dem echten Karlsruhe - in anderen Dimensionen
+// waere ein Stadtplan sinnlos, der Schalter wird dort gesperrt.
+function osmVerfuegbarkeit(){
+  const moeglich = georeferenziert();
+  osmFeld.disabled = !moeglich;
+  osmSchalter.classList.toggle('gesperrt', !moeglich);
+  osmHinweis.textContent = moeglich
+    ? 'OpenStreetMap'
+    : 'Nur in der Oberwelt verfügbar';
+  nachweisAktualisieren();
+}
+
 document.getElementById('rein').addEventListener('click',  () => zoomen(1.35));
 document.getElementById('raus').addEventListener('click',  () => zoomen(1/1.35));
 document.getElementById('alles').addEventListener('click', alleszeigen);
@@ -1238,7 +1726,8 @@ dimensionenAufbauen();
 def generate_html_map(plots: List[Plot],
                       output_file: str = "plot_map.html",
                       logo_path: Optional[str] = None,
-                      logo_url: Optional[str] = None):
+                      logo_url: Optional[str] = None,
+                      aemter_zuordnung: Optional[Dict[str, str]] = None):
     """Generiert die interaktive HTML-Karte im Karlscraft-Design"""
 
     plots_by_dimension: Dict[str, List[dict]] = {}
@@ -1254,9 +1743,34 @@ def generate_html_map(plots: List[Plot],
             'area': plot.get_area_m2(),
             'price': plot.get_price(),
             'color': uuid_to_color(plot.owner_uuid),
+            'amt': amt_von_plot(plot, aemter_zuordnung or {}),
         })
 
     dim_namen = {str(k): v for k, v in DIMENSIONSNAMEN.items()}
+
+    # Amtsdaten fuer die Anzeige: Farbe, Kuerzel und die Schriftfarbe, die auf
+    # der Amtsfarbe lesbar bleibt (fuer das Siegel im Grundbuchauszug).
+    amtsdaten = {
+        str(amt["schluessel"]): {
+            "name": amt["name"],
+            "kuerzel": amt["kuerzel"],
+            "farbe": amt["farbe"],
+            "kontrast": _kontrastfarbe(str(amt["farbe"])),
+        }
+        for amt in AEMTER
+    }
+    amtsrang = [str(amt["schluessel"]) for amt in AEMTER]
+
+    geo = {
+        "lat": URSPRUNG_LAT,
+        "lon": URSPRUNG_LON,
+        "rotation": WELT_ROTATION,
+        "dimension": GEO_DIMENSION,
+        "kacheln": OSM_KACHELN,
+        "maxZoom": OSM_MAX_ZOOM,
+        "nachweis": OSM_NACHWEIS,
+        "nachweisUrl": OSM_NACHWEIS_URL,
+    }
     logo_markup, favicon = build_logo_markup(logo_path, logo_url)
 
     links = "".join(
@@ -1277,7 +1791,10 @@ def generate_html_map(plots: List[Plot],
             .replace("__LINKS__", links)
             .replace("__PLOTS_JSON__", js(plots_by_dimension))
             .replace("__DIM_JSON__", js(dim_namen))
-            .replace("__URSPRUNG_JSON__", js(URSPRUNG_LABEL)))
+            .replace("__URSPRUNG_JSON__", js(URSPRUNG_LABEL))
+            .replace("__AEMTER_JSON__", js(amtsdaten))
+            .replace("__AMTSRANG_JSON__", js(amtsrang))
+            .replace("__GEO_JSON__", js(geo)))
 
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
@@ -1331,6 +1848,9 @@ def main():
                              'Mit --logo-url "" wird das eingebaute SVG-Wappen genutzt.')
     parser.add_argument("--merge-liste", default="grundstücke.txt",
                         help="Datei mit den zusammenzuführenden Plot-IDs")
+    parser.add_argument("--aemter-liste", default=AEMTER_DATEI,
+                        help="Datei mit manuellen Amtszuweisungen "
+                             "(Zeilenformat: Spielername = admin)")
     args = parser.parse_args()
 
     print(f"Lade JSON-Datei: {args.json_datei}")
@@ -1361,8 +1881,11 @@ def main():
     plots = parse_plots(data)
     print(f"  -> {len(plots)} Plots gefunden")
 
+    print("\n=== Ämter ===")
+    aemter_zuordnung, _ = parse_aemter(data, read_aemter_liste(args.aemter_liste))
+
     print("\n=== HTML-Karte generieren ===")
-    generate_html_map(plots, args.output, args.logo, args.logo_url)
+    generate_html_map(plots, args.output, args.logo, args.logo_url, aemter_zuordnung)
 
     print("\n=== Statistiken ===")
     total_area = sum(plot.get_area_m2() for plot in plots)
