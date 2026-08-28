@@ -150,6 +150,12 @@ class Plot:
         depth = abs(self.z_max - self.z_min) + 1
         return width * depth
 
+    def get_masse_formatted(self) -> str:
+        """Kantenlängen als 'Länge × Breite' in Metern (ein Block = ein Meter)"""
+        breite = abs(self.x_max - self.x_min) + 1
+        tiefe = abs(self.z_max - self.z_min) + 1
+        return f"{breite} x {tiefe} m"
+
     def get_area_formatted(self) -> str:
         """Gibt die Fläche formatiert zurück (m² oder ha)"""
         area = self.get_area_m2()
@@ -679,7 +685,8 @@ def merge_plots_by_ids(json_data: dict, plot_ids: Set[int]) -> dict:
     print(f"  Erfolgreich zusammengeführt zu Plot ID {merged_plot.plot_id}")
     print(f"  Neue Koordinaten: X: {merged_plot.x_min} bis {merged_plot.x_max}, "
           f"Z: {merged_plot.z_min} bis {merged_plot.z_max}")
-    print(f"  Fläche: {merged_plot.get_area_formatted()}")
+    print(f"  Fläche: {merged_plot.get_area_formatted()} "
+          f"({merged_plot.get_masse_formatted()})")
 
     return json_data
 
@@ -946,6 +953,8 @@ button.knopf.breit{flex:2;letter-spacing:.08em}
 #kc-auszug dt{color:#6B5B48;letter-spacing:.03em;white-space:nowrap}
 #kc-auszug dd{text-align:right;font-variant-numeric:tabular-nums;word-break:break-word}
 #kc-auszug dd.preis{font-family:var(--serif);font-weight:700;font-size:14px;color:var(--rot-tief)}
+#kc-auszug .masse{display:block;margin-top:2px;font-size:11px;color:#6B5B48;
+  letter-spacing:.04em;white-space:nowrap}
 #kc-auszug .siegel{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:2px;
   font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
   vertical-align:1px;box-shadow:0 1px 2px rgba(0,0,0,.3)}
@@ -1133,6 +1142,14 @@ function mercator(punkt, stufe){
 function mercatorAusMc(x, z, stufe){ return mercator(mcZuLatLon(x, z), stufe); }
 
 /* ---------- Hilfsfunktionen ---------- */
+
+// Kantenlaengen eines Grundstuecks. Ein Block ist ein Meter, die Grenzen sind
+// Eckpunkte - daher der Zuschlag von einem Block je Achse.
+function masseText(p){
+  const laengeX = p.x_max - p.x_min + 1;
+  const laengeZ = p.z_max - p.z_min + 1;
+  return nf.format(laengeX) + ' \u00d7 ' + nf.format(laengeZ) + ' m';
+}
 
 function flaecheText(m2){
   return m2 > 10000 ? nf2.format(m2/10000) + ' ha' : nf.format(m2) + ' m²';
@@ -1548,7 +1565,8 @@ function auszugZeigen(p, px, py){
       '<dt>Eigentümer</dt><dd>' + esc(p.owner) + amtsSiegel(p) + '</dd>' +
       '<dt>Lage X</dt><dd>' + nf.format(p.x_min) + ' bis ' + nf.format(p.x_max) + '</dd>' +
       '<dt>Lage Z</dt><dd>' + nf.format(p.z_min) + ' bis ' + nf.format(p.z_max) + '</dd>' +
-      '<dt>Fläche</dt><dd>' + flaecheText(p.area) + '</dd>' +
+      '<dt>Fläche</dt><dd>' + flaecheText(p.area) +
+        '<span class="masse">' + masseText(p) + '</span></dd>' +
       '<dt>Kaufpreis</dt><dd class="preis">' + nf.format(p.price) + ' €</dd>' +
     '</dl>';
 
