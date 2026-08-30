@@ -325,6 +325,10 @@
             Satellit (Esri)
         </label>
         <label>
+            <input type="radio" name="baseLayer" value="cyclosm">
+            🚲 Radkarte (CyclOSM)
+        </label>
+        <label>
             <input type="radio" name="baseLayer" value="lglDop">
             Luftbild aktuell (LGL BW, 20cm)
         </label>
@@ -373,7 +377,7 @@
         </label>
         <label>
             <input type="checkbox" id="cyclingToggle">
-            🚲 Radwege (CyclOSM)
+            🚲 Radwege (CyclOSM Lite)
         </label>
     </div>
 
@@ -469,11 +473,23 @@
             maxZoom: MAX_ZOOM
         });
         
-        const baseLayers = { osm: osmLayer, topo: topoLayer, satellite: satelliteLayer, lglDop: lglDopLayer };
+        // Radkarte CyclOSM - VOLLSTÄNDIGE Basiskarte (deckend), nicht transparent:
+        // rendert Straßen, Gebäude und Flächen selbst, nur fahrradorientiert
+        // eingefärbt. Gehört deshalb zu den Basiskarten, nicht zu den Overlays.
+        const cyclosmLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+            attribution: '© CyclOSM, © OpenStreetMap contributors',
+            maxNativeZoom: 20,
+            maxZoom: MAX_ZOOM,
+            subdomains: 'abc'
+        });
         
-        // Radwege-Overlay (CyclOSM) - eingefärbte Rad-Infrastruktur auf Basis
-        // von OpenStreetMap-Daten, gedacht als Overlay über einer Basiskarte.
-        const cyclingLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+        const baseLayers = { osm: osmLayer, topo: topoLayer, satellite: satelliteLayer, lglDop: lglDopLayer, cyclosm: cyclosmLayer };
+        
+        // CyclOSM Lite - die ausdrücklich als Overlay gedachte Variante: zeigt
+        // NUR die Radinfrastruktur (Radwege, Schutzstreifen, Busspuren) auf
+        // transparentem Hintergrund und lässt sich über jede Basiskarte legen.
+        // Hinweis: dieser Kachelserver ist spürbar langsamer als der reguläre.
+        const cyclingOverlayLayer = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm-lite/{z}/{x}/{y}.png', {
             attribution: '© CyclOSM, © OpenStreetMap contributors',
             maxNativeZoom: 20,
             maxZoom: MAX_ZOOM,
@@ -587,8 +603,8 @@
         
         // Overlays wieder über die (neue) Basiskarte legen
         function overlaysNachVornHolen() {
-            if (map.hasLayer(cyclingLayer)) {
-                cyclingLayer.bringToFront();
+            if (map.hasLayer(cyclingOverlayLayer)) {
+                cyclingOverlayLayer.bringToFront();
             }
             if (map.hasLayer(katasterLayer)) {
                 katasterLayer.bringToFront();
@@ -676,12 +692,12 @@
         // Radwege-Overlay-Steuerung (unabhängig zu- und abschaltbar)
         document.getElementById('cyclingToggle').addEventListener('change', (e) => {
             if (e.target.checked) {
-                cyclingLayer.addTo(map);
-                cyclingLayer.bringToFront();
+                cyclingOverlayLayer.addTo(map);
+                cyclingOverlayLayer.bringToFront();
                 if (map.hasLayer(katasterLayer)) katasterLayer.bringToFront();
                 if (currentRailwayLayer) currentRailwayLayer.bringToFront();
             } else {
-                map.removeLayer(cyclingLayer);
+                map.removeLayer(cyclingOverlayLayer);
             }
         });
         
